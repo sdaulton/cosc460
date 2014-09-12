@@ -5,21 +5,21 @@ After you complete lab 1, please answer the following questions.  For lab 1, the
 
 1. What is your name?  If you work with a partner, be sure to write both of your names.
 
-<Replace this text with your answer>
+Sam Daulton
 
 2. What did you think of this assignment?
 
-<Replace this text with your answer>
+I definitely learned a lot.  Implementing all the different classes and their methods helped me absorb a lot of the material in the reading and lectures.  In addtion, my Java skills were a bit rusty, and Lab 1 was a great refresher.
 
 3. What was the hardest part of this assignment?
 
-<Replace this text with your answer>
+The hardest part was debugging.  I probably spent 7+ hours debugging the Heapfile and SeqScan classes.
 
 4. Describe any missing or incomplete elements of your code.
 
-<Replace this text with your answer>
+To my knowledge it is complete.  
 
 5. Roughly how long did you spend working on this lab?
 
-<Replace this text with your answer>
+Probably about 20 hours.
 

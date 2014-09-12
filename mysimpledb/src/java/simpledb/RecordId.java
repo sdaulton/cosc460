@@ -10,6 +10,17 @@ public class RecordId implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    
+    /**
+     * PageId for this record
+     */
+    public PageId pid;
+    
+    /**
+     * Tuple number for this record
+     */
+    public int tupleno;
+    
     /**
      * Creates a new RecordId referring to the specified PageId and tuple
      * number.
@@ -18,23 +29,22 @@ public class RecordId implements Serializable {
      * @param tupleno the tuple number within the page.
      */
     public RecordId(PageId pid, int tupleno) {
-        // some code goes here
+        this.pid = pid;
+        this.tupleno = tupleno;
     }
 
     /**
      * @return the tuple number this RecordId references.
      */
     public int tupleno() {
-        // some code goes here
-        return 0;
+        return this.tupleno;
     }
 
     /**
      * @return the page id this RecordId references.
      */
     public PageId getPageId() {
-        // some code goes here
-        return null;
+        return this.pid;
     }
 
     /**
@@ -45,8 +55,18 @@ public class RecordId implements Serializable {
      */
     @Override
     public boolean equals(Object o) {
-        // some code goes here
-        throw new UnsupportedOperationException("implement this");
+    	if(o == null) {
+    		return false;
+    	}
+    	// checks if the class is RecordId
+    	if (o.getClass() == this.getClass()) {
+    		RecordId record_2 = (RecordId) o;
+    		// o is a RecordId, so check if page ids and tuple numbers are the same
+    		if ((record_2.pid.equals(this.pid)) && (record_2.tupleno == this.tupleno)) {
+    			return true;
+    		}
+    	}
+        return false;
     }
 
     /**
@@ -57,8 +77,13 @@ public class RecordId implements Serializable {
      */
     @Override
     public int hashCode() {
-        // some code goes here
-        throw new UnsupportedOperationException("implement this");
+        // Get the hashCode for the Page Id
+    	int hash_pid = this.pid.hashCode();
+        // Concatenate hashCode for the Page Id with the tuple number
+    	// Thus, the hashcode for the Record Id is table ID concatenated with 
+    	// Page Number, concatenated with tuple number
+    	String hash_rid = "" + hash_pid + this.tupleno;
+        return Integer.parseInt(hash_rid);
 
     }
 

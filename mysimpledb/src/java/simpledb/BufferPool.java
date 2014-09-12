@@ -31,12 +31,31 @@ public class BufferPool {
     public static final int DEFAULT_PAGES = 50;
 
     /**
+     * Maximum number of pages allowed in the buffer pool
+     */
+    public int numPages;
+    
+    /**
+     * Current number of pages in the buffer pool
+     */
+    public int pageCount;
+    
+    /**
+     * Array of Pages in the buffer pool
+     */
+    public Page[] pages;
+    
+    
+    
+    /**
      * Creates a BufferPool that caches up to numPages pages.
      *
      * @param numPages maximum number of pages in this buffer pool.
      */
     public BufferPool(int numPages) {
-        // some code goes here
+        this.numPages = numPages;
+        this.pageCount = 0;
+        this.pages = new Page[numPages];
     }
 
     public static int getPageSize() {
@@ -65,8 +84,24 @@ public class BufferPool {
      */
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
-        // some code goes here
-        return null;
+        for (int i = 0; i < this.numPages; i++) {
+        	// If the page is in the BufferPool, return it
+        	if (this.pages[i] != null){
+        		if (this.pages[i].getId().equals(pid)) {
+        			return this.pages[i];
+        		}
+        	}
+        }
+        // If the page is not in the BufferPool and the BufferPool is full, throw exception
+        if (this.pageCount >= this.numPages) {
+        	throw new DbException("BufferPool is full, cannot fit new page");
+        }
+        // Page is not in BufferPool, get its table id
+        Catalog catalog = Database.getCatalog();
+        DbFile file = catalog.getDatabaseFile(pid.getTableId());
+        this.pages[this.pageCount] =  file.readPage(pid);
+        this.pageCount++;
+        return this.pages[this.pageCount - 1];
     }
 
     /**

@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -17,13 +18,68 @@ import java.util.concurrent.ConcurrentHashMap;
  * @Threadsafe
  */
 public class Catalog {
-
+	
+	/**
+     * A help class to facilitate organizing the information of each table
+     */
+    public static class Table {
+    	
+    	/**
+         * The file where the table is stored
+         */
+    	public final DbFile file;
+    	
+    	/**
+         * The name of the table
+         */
+    	public final String name;
+    	
+    	/**
+         * the primary key field for the table
+         */
+    	public final String pkeyField;
+    	
+    	/**
+         * the table id for the table
+         */
+    	public final int tid;
+    	
+    	/**
+         * The Table constructor
+         */
+    	public Table(DbFile file, String name, String pkeyField) {
+    		this.tid = file.getId();
+    		this.file = file;
+            this.name = name;
+            this.pkeyField = pkeyField;
+        }
+    }
+    
+    /**
+     * Array of tables in Catalog
+     */
+    public Table[] tables;
+    
+    /**
+     * Number of tables in Catalog
+     */
+    public int numTables;
+    
+    /**
+     * Initial size of catalog (number of tables in tables array)
+     * I only made this a variable so that if I change this size later in the project,
+     * I wouldn't need to remember to update the clear() method to restore the Catalog 
+     * to the new size
+     */
+    public final int initial_catalog_size = 5;
+    
     /**
      * Constructor.
      * Creates a new, empty catalog.
      */
     public Catalog() {
-        // some code goes here
+        this.tables = new Table[this.initial_catalog_size]; 
+        this.numTables = 0;
     }
 
     /**
@@ -37,7 +93,18 @@ public class Catalog {
      *                  conflict exists, use the last table to be added as the table for a given name.
      */
     public void addTable(DbFile file, String name, String pkeyField) {
-        // some code goes here
+    	if (name == null) {
+    		throw new RuntimeException("Table name cannot be null");
+    	}
+    	//if tables array is full, resize it
+    	if (this.numTables >= this.tables.length) {
+    		Table[] temp = new Table[this.tables.length * 2];
+    		System.arraycopy(this.tables, 0, temp, 0, this.numTables);
+    		this.tables = temp;
+    	}
+    	//NOTE: THIS IS NOT OPTIMIZED OR SORTED IN ANY WAY!  (HeapFile Implementation)
+    	this.tables[this.numTables] = new Table(file, name, pkeyField);
+    	this.numTables += 1;
     }
 
     public void addTable(DbFile file, String name) {
@@ -62,8 +129,17 @@ public class Catalog {
      * @throws NoSuchElementException if the table doesn't exist
      */
     public int getTableId(String name) throws NoSuchElementException {
-        // some code goes here
-        return 0;
+    	if (name == null) {
+        	throw new NoSuchElementException("Table name must be a string, not null");
+        }
+        // iterates backwards through the tables array (starting with most recently added)
+        // so that if there is a name conflict, it will return the table id for the most recently added table
+        for (int i = this.numTables - 1; i >= 0; i--) {
+        	if (this.tables[i].name.equals(name)) {
+        		return this.tables[i].tid;
+        	}
+        }
+        throw new NoSuchElementException("Table name is not in Catalog");
     }
 
     /**
@@ -74,8 +150,12 @@ public class Catalog {
      * @throws NoSuchElementException if the table doesn't exist
      */
     public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {
-        // some code goes here
-        return null;
+    	for (int i = this.numTables - 1; i >= 0; i--) {
+        	if (this.tables[i].tid == tableid) {
+        		return this.tables[i].file.getTupleDesc();
+        	}
+        }
+        throw new NoSuchElementException("Table id is not in Catalog");
     }
 
     /**
@@ -86,30 +166,47 @@ public class Catalog {
      *                function passed to addTable
      */
     public DbFile getDatabaseFile(int tableid) throws NoSuchElementException {
-        // some code goes here
-        return null;
+    	for (int i = this.numTables - 1; i >= 0; i--) {
+        	if (this.tables[i].tid == tableid) {
+        		return this.tables[i].file;
+        	}
+        }
+        throw new NoSuchElementException("Table id is not in Catalog");
     }
 
     public String getPrimaryKey(int tableid) {
-        // some code goes here
-        return null;
+    	for (int i = this.numTables - 1; i >= 0; i--) {
+        	if (this.tables[i].tid == tableid) {
+        		return this.tables[i].pkeyField;
+        	}
+        }
+    	throw new RuntimeException("Table id is not in Catalog");
     }
 
     public Iterator<Integer> tableIdIterator() {
-        // some code goes here
-        return null;
+        //Creates an Integer array of table ids, converts it to a list, then returns a iterator
+    	Integer[] tableIds = new Integer[this.numTables];
+        for (int i = 0; i < this.numTables; i++) {
+        	tableIds[i] = this.tables[i].tid;
+        }
+        return Arrays.asList(tableIds).iterator();
     }
 
     public String getTableName(int id) {
-        // some code goes here
-        return null;
+    	for (int i = this.numTables - 1; i >= 0; i--) {
+        	if (this.tables[i].tid == id) {
+        		return this.tables[i].name;
+        	}
+        }
+    	throw new RuntimeException("Table id is not in Catalog");
     }
 
     /**
      * Delete all tables from the catalog
      */
     public void clear() {
-        // some code goes here
+    	// restore tables array to a blank array of the original size
+        this.tables = new Table[this.initial_catalog_size];
     }
 
     /**

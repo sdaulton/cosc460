@@ -1,0 +1,19 @@
+INDEX VERSION 1.126+/media/sf_machome/sdaulton/cosc460repo/.metadata/.plugins/org.eclipse.jdt.core
+954478507.index
+1279675953.index
+29338472.index
+207581026.index
+2913048097.index
+1507622055.index
+2031085872.index
+1529428270.index
+3379679282.index
+1453598739.index
+1225813827.index
+2064907913.index
+3305932411.index
+726145421.index
+811611730.index
+3933387802.index
+3693448964.index
+4201408329.index
