@@ -262,7 +262,7 @@ public class HeapPage implements Page {
     	}
     	markSlotUsed(slot_num, false);
     	// is this right???? ******
-    	//t.setRecordId(new RecordId(null, t.getRecordId().tupleno()));
+    	t.setRecordId(null);
     }
 
     /**
