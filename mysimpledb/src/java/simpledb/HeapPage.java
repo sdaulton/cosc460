@@ -17,6 +17,8 @@ public class HeapPage implements Page {
     final byte header[];
     final Tuple tuples[];
     final int numSlots;
+    boolean dirty; // indicates if page is dirty
+    TransactionId dirty_tid;  // transactionId that last dirtied the page, or null if page is dirty
 
     byte[] oldData;
     private final Byte oldDataLock = new Byte((byte) 0);
@@ -42,6 +44,8 @@ public class HeapPage implements Page {
         this.pid = id;
         this.td = Database.getCatalog().getTupleDesc(id.getTableId());
         this.numSlots = getNumTuples();
+        this.dirty = false;
+        this.dirty_tid = null;
         DataInputStream dis = new DataInputStream(new ByteArrayInputStream(data));
 
         // allocate and read the header slots of this page
@@ -60,6 +64,7 @@ public class HeapPage implements Page {
         dis.close();
 
         setBeforeImage();
+   
     }
 
     /**
@@ -241,8 +246,23 @@ public class HeapPage implements Page {
      *                     already empty.
      */
     public void deleteTuple(Tuple t) throws DbException {
-        // some code goes here
-        // not necessary for lab1
+    	HeapPageId t_pid = (HeapPageId) t.getRecordId().getPageId();
+    	if (!this.pid.equals(t_pid)) {
+    		throw new DbException("Tuple is not on this page.");
+    	}
+    	int slot_num = t.getRecordId().tupleno();
+    	if ((slot_num >= numSlots) || (slot_num < 0)){
+    		//Slot number is out of range
+    		throw new DbException("Slot number is out of range.");
+    	}
+    	
+    	if (!isSlotUsed(slot_num)) {
+    		// slot is already empty
+    		throw new DbException("Slot is already empty.");
+    	}
+    	markSlotUsed(slot_num, false);
+    	// is this right???? ******
+    	//t.setRecordId(new RecordId(null, t.getRecordId().tupleno()));
     }
 
     /**
@@ -254,8 +274,21 @@ public class HeapPage implements Page {
      *                     is mismatch.
      */
     public void insertTuple(Tuple t) throws DbException {
-        // some code goes here
-        // not necessary for lab1
+        if (getNumEmptySlots() == 0) {
+        	throw new DbException("Page is full.");
+        } else if (!t.td.equals(this.td)) {
+        	throw new DbException("This tuple's tuple descriptor does not match this page's.");
+        }
+        int slot_num = 0;
+        for (int i = 0; i < numSlots; i++) {
+        	if (!isSlotUsed(i)) {
+        		slot_num = i;
+        		break;
+        	}
+        }
+        t.setRecordId(new RecordId(this.getId(), slot_num));
+        tuples[slot_num] = t;
+        markSlotUsed(slot_num, true);
     }
 
     /**
@@ -263,17 +296,19 @@ public class HeapPage implements Page {
      * that did the dirtying
      */
     public void markDirty(boolean dirty, TransactionId tid) {
-        // some code goes here
-        // not necessary for lab1
+        this.dirty = dirty;
+        if (dirty) {
+        	this.dirty_tid = tid;
+        } else {
+        	this.dirty_tid = null;
+        }
     }
 
     /**
      * Returns the tid of the transaction that last dirtied this page, or null if the page is not dirty
      */
     public TransactionId isDirty() {
-        // some code goes here
-        // Not necessary for lab1
-        return null;      
+        return this.dirty_tid;    
     }
 
     /**
@@ -294,6 +329,7 @@ public class HeapPage implements Page {
      */
     public boolean isSlotUsed(int i) {
     	//index of byte in header where slot is represented
+    	
         int byte_index = (int) Math.floor(i / 8.0);
         //power of two corresponding to the slot, i.e. the left shift
         int shift =  i % 8;
@@ -308,8 +344,21 @@ public class HeapPage implements Page {
      * Abstraction to fill or clear a slot on this page.
      */
     private void markSlotUsed(int i, boolean value) {
-        // some code goes here
-        // not necessary for lab1
+    	//index of byte in header where slot is represented
+    	
+        int byte_index = (int) Math.floor(i / 8.0);
+        //power of two corresponding to the slot, i.e. the left shift
+        int shift =  i % 8;
+        if (value){
+        	// slot will be used, mark the corresponding bit as 1 (insertion)
+        	header[byte_index] = (byte) ((1 << shift) | Byte.valueOf(header[byte_index]).intValue());
+        	//header[byte_index] |= (1 << shift);
+        } else{
+        // slot will not be used mark the corresponding bit as 0 (deletion)
+        // delete the tuple, i.e. change the header bit to 0, by bitwise AND of a string 
+        //of all 1's and one 0 in the bit corresponding to the tuple's slot
+        header[byte_index] = (byte) ((255 - (1 << shift)) & Byte.valueOf(header[byte_index]).intValue());
+        }
     }
 
     /**

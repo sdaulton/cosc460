@@ -18,6 +18,13 @@
 	<section name="BuildPathsPropertyPage">
 		<item value="2" key="pageIndex"/>
 	</section>
+	<section name="DialogBounds_SuperInterfaceSelectionDialog">
+		<item value="362" key="DIALOG_WIDTH"/>
+		<item value="-67" key="DIALOG_Y_ORIGIN"/>
+		<item value="620" key="DIALOG_HEIGHT"/>
+		<item value="109" key="DIALOG_X_ORIGIN"/>
+		<item value="1|Droid Sans|10.206185|0|GTK|1|" key="DIALOG_FONT_NAME"/>
+	</section>
 	<section name="JavaSearchPage">
 		<item value="false" key="CASE_SENSITIVE"/>
 		<item value="11" key="INCLUDE_MASK"/>
@@ -26,10 +33,10 @@
 			<item value="11" key="includeMask"/>
 			<item value="1" key="limitTo"/>
 			<item value="0" key="scope"/>
-			<item value="" key="javaElement"/>
 			<item value="main" key="pattern"/>
-			<item value="0" key="matchLocations"/>
+			<item value="" key="javaElement"/>
 			<item value="0" key="searchFor"/>
+			<item value="0" key="matchLocations"/>
 			<item value="false" key="isCaseSensitive"/>
 			<list key="workingSets">
 			</list>
@@ -38,28 +45,21 @@
 			<item value="11" key="includeMask"/>
 			<item value="1" key="limitTo"/>
 			<item value="0" key="scope"/>
-			<item value="" key="javaElement"/>
 			<item value="mysimpledb" key="pattern"/>
-			<item value="0" key="matchLocations"/>
+			<item value="" key="javaElement"/>
 			<item value="0" key="searchFor"/>
+			<item value="0" key="matchLocations"/>
 			<item value="false" key="isCaseSensitive"/>
 			<list key="workingSets">
 			</list>
 		</section>
 	</section>
-	<section name="DialogBounds_SuperInterfaceSelectionDialog">
-		<item value="362" key="DIALOG_WIDTH"/>
-		<item value="-67" key="DIALOG_Y_ORIGIN"/>
-		<item value="109" key="DIALOG_X_ORIGIN"/>
-		<item value="620" key="DIALOG_HEIGHT"/>
-		<item value="1|Droid Sans|10.206185|0|GTK|1|" key="DIALOG_FONT_NAME"/>
+	<section name="quick_assist_proposal_size">
 	</section>
 	<section name="NewClassWizardPage">
 		<item value="false" key="create_constructor"/>
-		<item value="true" key="create_unimplemented"/>
 		<item value="false" key="create_main"/>
-	</section>
-	<section name="quick_assist_proposal_size">
+		<item value="true" key="create_unimplemented"/>
 	</section>
 	<section name="org.eclipse.jdt.internal.ui.dialogs.OpenTypeSelectionDialog2">
 		<item value="true" key="ShowStatusLine"/>

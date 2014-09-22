@@ -4,6 +4,8 @@ import java.io.*;
 
 import java.util.concurrent.ConcurrentHashMap;
 
+import java.util.ArrayList; //I ADDED THIS, AM I ALLOWED TO?
+import java.util.LinkedList; //AND THIS?
 /**
  * BufferPool manages the reading and writing of pages into memory from
  * disk. Access methods call into it to retrieve pages, and it fetches
@@ -45,6 +47,11 @@ public class BufferPool {
      */
     public Page[] pages;
     
+    /**
+     * LinkedList of pages in the buffer pool, the head of the list is the most recently used page, the tail is the least
+     */
+    public LinkedList<PageId> evict_list; 
+    
     
     
     /**
@@ -56,6 +63,7 @@ public class BufferPool {
         this.numPages = numPages;
         this.pageCount = 0;
         this.pages = new Page[numPages];
+        this.evict_list = new LinkedList<PageId>();
     }
 
     public static int getPageSize() {
@@ -86,22 +94,34 @@ public class BufferPool {
             throws TransactionAbortedException, DbException {
         for (int i = 0; i < this.numPages; i++) {
         	// If the page is in the BufferPool, return it
+        	
         	if (this.pages[i] != null){
         		if (this.pages[i].getId().equals(pid)) {
+        			evict_list.remove(pid); // remove the instance of pid in the linked list
+        			evict_list.addFirst(pid); // add the instance of pid to the head of the linked list
         			return this.pages[i];
         		}
         	}
         }
         // If the page is not in the BufferPool and the BufferPool is full, throw exception
         if (this.pageCount >= this.numPages) {
-        	throw new DbException("BufferPool is full, cannot fit new page");
+        	evictPage();
+        	this.pageCount -= 1;
         }
         // Page is not in BufferPool, get its table id
         Catalog catalog = Database.getCatalog();
         DbFile file = catalog.getDatabaseFile(pid.getTableId());
-        this.pages[this.pageCount] =  file.readPage(pid);
+        int first_empty = 0;
+        for (int i = 0; i < numPages; i++) {
+        	if (pages[i] == null) {
+        		first_empty = i;
+        		break;
+        	}
+        }
+        this.pages[first_empty] = file.readPage(pid);
         this.pageCount++;
-        return this.pages[this.pageCount - 1];
+        evict_list.addFirst(pid);
+        return this.pages[first_empty];
     }
 
     /**
@@ -150,6 +170,44 @@ public class BufferPool {
         // not necessary for lab1|lab2|lab3|lab4                                                         // cosc460
     }
 
+    
+    /**
+     * Helper function for insertTuple and Delete Tuple:
+     * Gets the file, inserts/deletes the tuple, dirties the pages that were modified, and updates those pages if they are in the BufferPool
+     * @param tid     the transaction adding the tuple
+     * @param tableId the table to add the tuple to
+     * @param t       the tuple to add
+     * @param isInsert a boolean indicating if the update is an Insert
+     * 
+     */
+    public void updateTuple(TransactionId tid, int tableId, Tuple t, boolean isInsert) 
+    		throws DbException, IOException, TransactionAbortedException {
+    	Catalog catalog = Database.getCatalog();
+        DbFile file = catalog.getDatabaseFile(tableId);
+        ArrayList<Page> modified_pages = null;
+        if (isInsert) {
+        	modified_pages = file.insertTuple(tid, t);
+        } else {
+        	modified_pages = file.deleteTuple(tid, t);
+        }
+        Page page = null;
+        for (int i = 0; i < modified_pages.size(); i++) {
+        	page = modified_pages.get(i);
+        	if (page != null) {
+        		page.markDirty(true, tid);
+        		for (int j = 0; j < numPages; j++) {
+        			if (pages[j] != null) {
+        				if (pages[j].getId().equals(page.getId())) {
+        				// the modified page has a former version in the buffer pool
+        				// replace with the modified page
+        				pages[j] = page;
+        				}
+        			}
+        		}
+        	}
+        }
+    }
+    
     /**
      * Add a tuple to the specified table on behalf of transaction tid.  Will
      * acquire a write lock on the page the tuple is added to and any other
@@ -168,6 +226,7 @@ public class BufferPool {
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+    	updateTuple(tid, tableId, t, true);
     }
 
     /**
@@ -186,6 +245,7 @@ public class BufferPool {
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+    	updateTuple(tid, t.getRecordId().getPageId().getTableId(), t, false);
     }
 
     /**
@@ -194,9 +254,23 @@ public class BufferPool {
      * break simpledb if running in NO STEAL mode.
      */
     public synchronized void flushAllPages() throws IOException {
-        // some code goes here
-        // not necessary for lab1
-
+    	Catalog catalog = Database.getCatalog();
+    	DbFile file = null;
+    	Page page = null;
+    	for (int i = 0; i < numPages; i++){
+    		if (pages[i] != null) {
+    			page = pages[i];
+    			if (page.isDirty() != null) {
+    				page.markDirty(false, new TransactionId());
+    				file = catalog.getDatabaseFile(page.getId().getTableId());
+    				file.writePage(page);
+    			}
+    			break;
+    			
+		
+    		}
+    	}
+    	
     }
 
     /**
@@ -218,6 +292,22 @@ public class BufferPool {
     private synchronized void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+    	Catalog catalog = Database.getCatalog();
+    	DbFile file = catalog.getDatabaseFile(pid.getTableId());
+    	Page page = null;
+    	for (int i = 0; i < numPages; i++){
+    		if (pages[i] != null) {
+    			page = pages[i];
+    			if (pages[i].getId().equals(pid)) {
+    				if (page.isDirty() != null) {
+    					page.markDirty(false, new TransactionId());
+    					file.writePage(page);
+    				}
+    				break;
+    			}
+		
+    		}
+    	}
     }
 
     /**
@@ -235,6 +325,21 @@ public class BufferPool {
     private synchronized void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
+    	PageId pid = evict_list.removeLast();
+    	try{
+    		flushPage(pid);
+    	} catch (IOException e) {
+    		throw new DbException("Could not write page to file.  Page not evicted.");
+    	}
+    	Page page = null;
+    	for (int i = 0; i < numPages; i++){
+    		if (pages[i] != null) {
+    			page = pages[i];
+    			if (pages[i].getId().equals(pid)) {
+    				pages[i] = null;
+    			}
+    		}
+    	}
     }
 
 }

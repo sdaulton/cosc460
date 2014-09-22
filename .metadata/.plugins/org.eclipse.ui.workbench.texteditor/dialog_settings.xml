@@ -4,7 +4,7 @@
 		<item value="302" key="DIALOG_WIDTH"/>
 		<item value="75" key="DIALOG_Y_ORIGIN"/>
 		<item value="408" key="DIALOG_HEIGHT"/>
-		<item value="1347" key="DIALOG_X_ORIGIN"/>
+		<item value="1283" key="DIALOG_X_ORIGIN"/>
 		<item value="1|Droid Sans|10.0|0|GTK|1|" key="DIALOG_FONT_NAME"/>
 	</section>
 	<section name="org.eclipse.ui.texteditor.FindReplaceDialog">
