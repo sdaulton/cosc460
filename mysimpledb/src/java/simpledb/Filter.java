@@ -9,6 +9,10 @@ public class Filter extends Operator {
 
     private static final long serialVersionUID = 1L;
 
+    
+    public DbIterator[] iter_children; //  array of child DbIterators -- if only one child, only 1 DbIterator in array
+    public Predicate pred; //predicate for the filter
+
     /**
      * Constructor accepts a predicate to apply and a child operator to read
      * tuples to filter from.
@@ -17,30 +21,30 @@ public class Filter extends Operator {
      * @param child The child operator
      */
     public Filter(Predicate p, DbIterator child) {
-        // some code goes here
+        this.pred = p;
+        this.iter_children = new DbIterator[1];
+        this.iter_children[0] = child;
     }
 
     public Predicate getPredicate() {
-        // some code goes here
-        return null;
+        return pred;
     }
 
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return null;
+        return iter_children[0].getTupleDesc();
     }
 
-    public void open() throws DbException, NoSuchElementException,
+    /*public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
-        // some code goes here
+    	open();
     }
 
     public void close() {
-        // some code goes here
-    }
+    }*/
 
     public void rewind() throws DbException, TransactionAbortedException {
-        // some code goes here
+    	iter_children[0].rewind();
     }
 
     /**
@@ -54,19 +58,27 @@ public class Filter extends Operator {
      */
     protected Tuple fetchNext() throws NoSuchElementException,
             TransactionAbortedException, DbException {
-        // some code goes here
+        Tuple t = null;
+    	while (iter_children[0].hasNext()) {
+        	t = iter_children[0].next();
+        	if (pred.filter(t)) {
+        		return t;
+        	}
+        }
         return null;
     }
 
     @Override
     public DbIterator[] getChildren() {
-        // some code goes here
-        return null;
+        return iter_children;
     }
 
     @Override
     public void setChildren(DbIterator[] children) {
-        // some code goes here
+        if (children.length == 1) {
+        	iter_children[0] = children[0];
+        } 
+        // should I throw exception here???
     }
 
 }

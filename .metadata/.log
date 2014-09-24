@@ -43,3 +43,12 @@ Java Model Exception: Java Model Status [Timed out while retrieving the attached
 	at org.eclipse.jface.text.TextViewerHoverManager$4.run(TextViewerHoverManager.java:166)
 !SUBENTRY 1 org.eclipse.jdt.core 4 1012 2014-09-08 15:54:38.032
 !MESSAGE Timed out while retrieving the attached javadoc for ByteArrayOutputStream [in ByteArrayOutputStream.class [in java.io [in /usr/lib/jvm/java-7-openjdk-i386/jre/lib/rt.jar]]] 
+!SESSION 2014-09-24 13:46:19.513 -----------------------------------------------
+eclipse.buildId=debbuild
+java.version=1.7.0_65
+java.vendor=Oracle Corporation
+BootLoader constants: OS=linux, ARCH=x86, WS=gtk, NL=en_US
+Command-line arguments:  -os linux -ws gtk -arch x86
+
+!ENTRY org.eclipse.core.resources 2 10035 2014-09-24 13:46:30.968
+!MESSAGE The workspace exited with unsaved changes in the previous session; refreshing workspace to recover changes.

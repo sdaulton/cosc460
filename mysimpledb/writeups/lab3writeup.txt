@@ -4,12 +4,69 @@ Report for Lab 3
 Answer the questions from the lab description here.  Questions 8 and 9 do not require answers.
 
 1.
+Classes that implement the DbIterator interface:
+Aggregate, Delete, Filter, HashEquiJoin (Note: we haven't encountered this yet in mysimpledb, but it is listed as a known implementing class on the simpledb JavaDocs), Insert, Join, Operator, OrderBy, Project, SeqScan, and TupleIterator
+
 2.
+Subclasses of Operator:
+Aggregate, Delete, Filter, HashEquiJoin (same Note as question 1), Insert, OrderBy, Project
+
 3.
+Relational Algebra Operators:
+	Supported as subclasses of Operator:
+		select (Filter), project (Project), join (Join), cross product (Join)
+
+	Not supported as subclasses of Operator:
+		union, intersection, difference
+
 4.
+Filter implements the DbIterator interface but doens't have next() or hasNext() methods, because Filter extends Operator, i.e. Filter is a subclass of Operator.  This means that Filter has access to all the Operator methods as Filter's own.  Thus it can call next() and hasNext(), for which it just uses Operator's next() and hasNext().
 5.
+Tuple t = null;
+while (iterR.hasNext()) {	
+	t = iterR.next();
+	if (t matches predicate) {
+		return t;
+	} 
+}
+return null;
+
 6.
+list = []
+Tuple t1 = null;
+Tuple t2 = null;
+Tuple tNew = null;
+while (iterR.hasNext()) {
+	t1 = iterR.next();
+	while (iterS.hasNext()) {
+		t2 = iterS.next();
+		if (t1 and t2 match join predicate) {
+			tNew = merge(t1, t2);
+			list.append(tNew);
+		}	
+	}
+	iterS.rewind();
+}
+return list;
+
 7.
+while(true) {
+	if (t1 == null) {
+		if (iterR.hasNext()) {
+			t1 =  iterR.next();
+			iterS.rewind();
+		} else {
+			return null;
+		}	
+	}
+	while(iterS.hasNext() {
+		t2 = iterS.next();
+		if (t1 and t2 match join predicate) {
+			return merge(t1, t2);
+		}	
+	}
+	t1 = null;
+}		
 
 After you complete lab 3, please answer the following questions.  
 

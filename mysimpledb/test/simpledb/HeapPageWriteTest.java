@@ -120,7 +120,7 @@ public class HeapPageWriteTest extends SimpleDbTestBase {
             deleted += 2;
             assertEquals(free + deleted, page.getNumEmptySlots());
         }
-
+        
         // now, the page should be empty.
         try {
             page.deleteTuple(first);

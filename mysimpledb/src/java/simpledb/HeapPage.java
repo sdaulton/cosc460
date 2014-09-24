@@ -246,6 +246,9 @@ public class HeapPage implements Page {
      *                     already empty.
      */
     public void deleteTuple(Tuple t) throws DbException {
+    	if (t.getRecordId() == null){
+    		throw new DbException("Tuple is not on this page.");
+    	}
     	HeapPageId t_pid = (HeapPageId) t.getRecordId().getPageId();
     	if (!this.pid.equals(t_pid)) {
     		throw new DbException("Tuple is not on this page.");
