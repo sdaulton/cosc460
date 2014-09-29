@@ -37,7 +37,8 @@ public class Filter extends Operator {
 
     /*public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
-    	open();
+    	iter_children[0].open();
+    	this.open = true;
     }
 
     public void close() {
@@ -59,12 +60,15 @@ public class Filter extends Operator {
     protected Tuple fetchNext() throws NoSuchElementException,
             TransactionAbortedException, DbException {
         Tuple t = null;
+        iter_children[0].open();
     	while (iter_children[0].hasNext()) {
         	t = iter_children[0].next();
         	if (pred.filter(t)) {
+        		
         		return t;
         	}
         }
+    	iter_children[0].close();
         return null;
     }
 

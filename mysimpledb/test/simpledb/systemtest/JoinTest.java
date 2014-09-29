@@ -47,7 +47,7 @@ public class JoinTest extends SimpleDbTestBase {
         SeqScan ss2 = new SeqScan(tid, table2.getId(), "");
         JoinPredicate p = new JoinPredicate(0, Predicate.Op.EQUALS, 0);
         Join joinOp = new Join(p, ss1, ss2);
-
+        
         // test the join results
         SystemTestUtil.matchTuples(joinOp, expectedResults);
 
