@@ -31,18 +31,19 @@ public class Filter extends Operator {
     }
 
     public TupleDesc getTupleDesc() {
-        // some code goes here
         return iter_children[0].getTupleDesc();
     }
 
-    /*public void open() throws DbException, NoSuchElementException,
+    public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
     	iter_children[0].open();
-    	this.open = true;
+    	super.open();
     }
 
     public void close() {
-    }*/
+    	iter_children[0].close();
+    	super.close();
+    }
 
     public void rewind() throws DbException, TransactionAbortedException {
     	iter_children[0].rewind();
@@ -60,7 +61,6 @@ public class Filter extends Operator {
     protected Tuple fetchNext() throws NoSuchElementException,
             TransactionAbortedException, DbException {
         Tuple t = null;
-        iter_children[0].open();
     	while (iter_children[0].hasNext()) {
         	t = iter_children[0].next();
         	if (pred.filter(t)) {
@@ -68,7 +68,6 @@ public class Filter extends Operator {
         		return t;
         	}
         }
-    	iter_children[0].close();
         return null;
     }
 

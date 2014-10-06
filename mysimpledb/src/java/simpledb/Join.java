@@ -59,14 +59,18 @@ public class Join extends Operator {
         return TupleDesc.merge(iter_children[0].getTupleDesc(), iter_children[1].getTupleDesc());
     }
 
-    /*public void open() throws DbException, NoSuchElementException,
+    public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
-        // some code goes here
+        iter_children[0].open();
+        iter_children[1].open();
+        super.open();
     }
 
     public void close() {
-        // some code goes here
-    }*/
+    	iter_children[0].close();
+        iter_children[1].close();
+        super.close();
+    }
 
     public void rewind() throws DbException, TransactionAbortedException {
         iter_children[0].rewind();
@@ -92,16 +96,12 @@ public class Join extends Operator {
      * @see JoinPredicate#filter
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
-    	iter_children[1].open();
     	while (true) {
         	if (t1 == null) {
-        		iter_children[0].open();
         		if (iter_children[0].hasNext()) {
         			t1 = iter_children[0].next();
         			iter_children[1].rewind();
         		} else {
-        			iter_children[0].close();
-        			iter_children[1].close();
         			return null;
         		}
         	}
@@ -118,8 +118,6 @@ public class Join extends Operator {
         				tNew.fields[idx] = t2.getField(j);
         				idx++;
         			}
-        			iter_children[0].close();
-        			iter_children[1].close();
         			return tNew;
         		}
         	}
