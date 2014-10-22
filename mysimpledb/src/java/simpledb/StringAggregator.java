@@ -11,6 +11,12 @@ import simpledb.Aggregator.Op;
 public class StringAggregator implements Aggregator {
 
     private static final long serialVersionUID = 1L;
+    private Op what;
+    private int gbfield;
+    private Type gbfieldtype;
+    private int afield;
+    // a map of groupVal -> AggregateFields
+    private HashMap<String, AggregateFields> groups;
 
     
     public int gbfield;
@@ -155,6 +161,19 @@ public class StringAggregator implements Aggregator {
     	Collection<Tuple> tuples = tupMap.values();
         return new TupleIterator(this.td, tuples);
         //throw new UnsupportedOperationException("please implement me for lab3");                           // cosc460
+
     }
 
+    /**
+     * A helper struct to store accumulated aggregate values.
+     */
+    private class AggregateFields {
+        public String groupVal;
+        public int count;
+
+        public AggregateFields(String groupVal) {
+            this.groupVal = groupVal;
+            count = 0;
+        }
+    }
 }

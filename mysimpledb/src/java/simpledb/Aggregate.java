@@ -2,6 +2,8 @@ package simpledb;
 
 import java.util.*;
 
+import simpledb.Aggregator.Op;
+
 /**
  * The Aggregation operator that computes an aggregate (e.g., sum, avg, max,
  * min). Note that we only support aggregates over a single column, grouped by a
@@ -10,6 +12,14 @@ import java.util.*;
 public class Aggregate extends Operator {
 
     private static final long serialVersionUID = 1L;
+    private TupleDesc td = null;
+    private DbIterator child = null;
+    private DbIterator it = null;
+    private Aggregator agg = null;
+    private Aggregator.Op aop = null;
+    private String gFieldName = null;
+    private String aFieldName = null;
+    private int afield, gfield;
 
     
     public DbIterator child;
@@ -35,6 +45,7 @@ public class Aggregate extends Operator {
      */
     public Aggregate(DbIterator child, int afield, int gfield, Aggregator.Op aop) {
         this.child = child;
+
         this.aggfield = afield;
         this.gbfield = gfield;
         this.aggOp = aop;
@@ -61,6 +72,7 @@ public class Aggregate extends Operator {
         	throw new RuntimeException("Transaction aborted");
         } catch (DbException e) {
         	throw new RuntimeException("Transaction aborted");
+
         }
     }
 
@@ -74,6 +86,7 @@ public class Aggregate extends Operator {
         	return this.gbfield;
         }
         return simpledb.Aggregator.NO_GROUPING;
+
     }
 
     /**
@@ -163,13 +176,12 @@ public class Aggregate extends Operator {
     @Override
     public DbIterator[] getChildren() {
         return new DbIterator[]{child};
+
     }
 
     @Override
     public void setChildren(DbIterator[] children) {
-        if (children.length == 1) {
-        	this.child = children[0];
-        }
+        this.child = children[0];
     }
 
 }

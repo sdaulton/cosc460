@@ -1,4 +1,4 @@
-package simpledb;
+ package simpledb;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -10,6 +10,13 @@ import java.util.HashMap;
 public class IntegerAggregator implements Aggregator {
 
     private static final long serialVersionUID = 1L;
+
+    private Op what;
+    private int gbfield;
+    private Type gbfieldtype;
+    private int afield;
+    // a map of groupVal -> AggregateFields
+    private HashMap<String, AggregateFields> groups;
 
     /**
      * Aggregate constructor
@@ -67,7 +74,7 @@ public class IntegerAggregator implements Aggregator {
         
         this.td = null;
         this.tupMap = new HashMap<String, Tuple>();
-        	
+        
     }
 
     /**
@@ -196,6 +203,7 @@ public class IntegerAggregator implements Aggregator {
         /*throw new
         UnsupportedOperationException("please implement me for lab3");    
         */
+
     }
 
 }
