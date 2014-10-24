@@ -20,11 +20,22 @@ Walk thru 2: simpledb.Parser.processNextStatement()
 
 Walk thru 3: simpledb.Parser.handleQueryStatement()
 
-	<fill this in>	
+	This method creates a new Query object using the TransactionId passed as a parameter
+	and a new LogicalPlan object using the TransactionId and ZQuery object parameters.
+	The LogicalPlan object is the logical plan for the parsed query.
+	The physicalPlan method is then called on the LogicalPlan object to get a DbIterator
+	which is the root of the physical plan.  The physicalPlan method takes a hashMap of the table's stats
+	to make its decisionThe Query object's logical plans and physical plan are then set
+	using those respective objects.	The method then invokes the QueryPlanVisualizer if the class is available.
+	The method returns the Query object it created. 
 
 Walk thru 4: simpledb.Parser.parseQueryLogicalPlan()
 
-	<fill this in>
+	A vector storing ZFromIt objects (which represent the tables used in the Query) is extracted from the ZQuery object using the getFrom method (i.e. we get the tables stated in the From clause).  A new LogicalPlan object, lp, is created.  The lp.setQuery(q.toString()) method is called.  For each element in the vector, we try to get the table id for the specified table from the element.  We get the alias (name) of the table and add a scan (to scan that table) to our Logical Plan.  
+	Next, the method deals with the where clause.  We use the getWhere method to get the where clause from the ZQuery object.  We check the where clause for any nested queries, which are not supported.  We then create a new where Zexpression object for the where clause and call the processExpression method on that expression.  The processExpression function first checks the expression for operators (i.e. AND, OR), which are not supported.  We then determine if the op is a join or some other binary operation query.
+	If the operation is a join, we parse the two fields and the operator in the join predicate and add the corresponding join to the logical plan.  If the operation is a filter, we parse the column name, the predicate operation, and the value to compare the values in the column to.  We then add the filter to the logical plan.
+	Back in parseQueryLogicalPlan(), we now get the group by fields by using the q.getGroupBy().  At most one group by clause is supported.  If there is only 1, we get the group by field and print it out.  Next we check that the select clause is valid (i.e. no expressions) and parse it.  We look for aggregates.  If there are aggregates, we make sure that the aggregates are on at most one field.  We add each field we want to project to the LogicalPlan. We then check to make sure that all non-aggregate fields appear in the group by field, if there are aggregates in the select clause.  We make sure that there is no group by if there are no aggregates, and then add any aggregates to the LogicalPlan.  We check for an order by and if it exists, we add it to the LogicalPlan.
+	We then return the LogicalPlan.
 
 	Note: this method is rather long and complex.  Your walk thru should focus
 	on the high-level ideas.  Specifically, explain how SQL query is processed to construct the LogicalPlan.  
@@ -36,8 +47,16 @@ Walk thru 5: simpledb.LogicalPlan.physicalPlan()
 		- filterSelectivities
 		- statsMap
 		- subplanMap
-
-	<fill this in>
+	We create an iterator over the tables in a vector (the tables used in the logical plan), a HashMaps equivMap, filterSelectivities, and statsMap.
+	For each table in the logical plan:
+		We get an iterator to sequentially scan the table, and store that iterator in subplanMap using the table alias as the key.
+		We get the TableStats for that table using the baseTableStats.get method, and add the TableStats to the statsMap using the baseTableName as a the key.
+		We add the value 1.0 to filterSelectivities using table.alias as the key.
+	We then create an iterator over the filters vector (which contains filters in the logical plan).
+	For each filter:
+		we get the subplan for the table being filtered from subplanMap.  We get the TupleDesc for that table, the field type for the field being filtered, and the predicate used in thef ilter.  We then put the new filter in our subplan map with the key being the table alias.
+		We use the statsMap to get the TableStats, s, for the table being filtered and then use the s.estimateSelectivity method to get an estimate of the selectivity of the filter.  We then store this in filterSelectivities, using the table alias as the key.
+	We then create a new JoinOptimizer Object and use the orderJoins() method to create an efficient join on the tables.`
 
 Walk thru 6: simpledb.JoinOptimizer.orderJoins()
 

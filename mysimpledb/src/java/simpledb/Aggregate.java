@@ -12,14 +12,6 @@ import simpledb.Aggregator.Op;
 public class Aggregate extends Operator {
 
     private static final long serialVersionUID = 1L;
-    private TupleDesc td = null;
-    private DbIterator child = null;
-    private DbIterator it = null;
-    private Aggregator agg = null;
-    private Aggregator.Op aop = null;
-    private String gFieldName = null;
-    private String aFieldName = null;
-    private int afield, gfield;
 
     
     public DbIterator child;

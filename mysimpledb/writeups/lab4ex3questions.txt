@@ -5,7 +5,11 @@ Answer these questions.  With each question is a hint as to which part of the co
 
 (Walk thru 1) How many instances of the TableStats class are created?
 
+	It depends on the number of tables in the catalog.  For each table in the catalog, a new TableStats class is created.	
+
 (Walk thru 4) In class, we said a logical plan is a relational algebra tree.  That's not how it's represented in SimpleDB.  How is it represented? 
+
+	It's an object that has attributes for all aspects of the query (i.e. a parsed query).  It has the tables in the from clause, the expressions in the where clause, fields to project, any aggregates, group bys and order bys in the select clause.	
 
 (Walk thru 5) The physicalPlan is a relational algebra tree.  Describe the basic shape of this tree in terms of which ops go where.
 

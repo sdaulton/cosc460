@@ -11,12 +11,6 @@ import simpledb.Aggregator.Op;
 public class StringAggregator implements Aggregator {
 
     private static final long serialVersionUID = 1L;
-    private Op what;
-    private int gbfield;
-    private Type gbfieldtype;
-    private int afield;
-    // a map of groupVal -> AggregateFields
-    private HashMap<String, AggregateFields> groups;
 
     
     public int gbfield;

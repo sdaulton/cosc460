@@ -11,13 +11,6 @@ public class IntegerAggregator implements Aggregator {
 
     private static final long serialVersionUID = 1L;
 
-    private Op what;
-    private int gbfield;
-    private Type gbfieldtype;
-    private int afield;
-    // a map of groupVal -> AggregateFields
-    private HashMap<String, AggregateFields> groups;
-
     /**
      * Aggregate constructor
      *
