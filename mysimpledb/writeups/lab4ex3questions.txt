@@ -12,18 +12,33 @@ Answer these questions.  With each question is a hint as to which part of the co
 	It's an object that has attributes for all aspects of the query (i.e. a parsed query).  It has the tables in the from clause, the expressions in the where clause, fields to project, any aggregates, group bys and order bys in the select clause.	
 
 (Walk thru 5) The physicalPlan is a relational algebra tree.  Describe the basic shape of this tree in terms of which ops go where.
+	Selects (filters) go at the bottom, before joins.  Then come the joins in a (almost) left-deep tree formation, then projects and other operations are highest.
 
 (Walk thru 5) Suppose a query applies multiple filters to a single table.  For example, the query described in the lab write up filters on both actor first and last name.  In such cases, how is the selectivity estimated?  
+	We estimate the selectivity of applying the first filter on the table and store the filter in subplanMap using the table alias as the key.  Note the filter is stored as the subplan for the table.  When the filters iterator reachs the next filter on that same table, we get the subplan (previous filters) for this table, and update the subplan to reflect the new filter.  We then get the table stats for the base table, and the estimate the selectivity for the most recent filter alone.  We then multiply this selectivity by the selectivity resulting from the previous filters and store this in filterSelectivities.
 
 (Walk thru 5) Explain the meaning of this if statement.  Why should the subplanMap have size 0 or 1 at this point?
 
     if (subplanMap.size() > 1) {
         throw new ParsingException("Query does not include join expressions joining all nodes!");
     }
-
+	At this point, all of the joins should be combined into a single relation --> we have iterated through all the join nodes and created iterators for the resulting table of each join.  If this is a single query all tables should be joined (since cross products are not supported).  Thus at this point, subplanMap should have either have 1 table (the result of the join(s)) or 0 tables.
+	
 (Walk thru 7) What does computeCostAndCardOfSubplan do when the joinSet contains only a single join, the joinToRemove?
 
+	Returns the cost of that join and sets it as the previous best for the subset by making a call to estimateJoinCost and estimateJoinCardinality.
+
 (Walk thru 9) Suppose we are considering a join between a table A and the result of a join between B and C.  Assume table A is the outer relation in the join.  What is the cost estimate?  Your expression should be in terms of the sizes (# pages, # tuples) of the base relations A, B, C.
+	left join I/O cost = (# of tuples of A) + (# of pages of A)* (# of tuples in B joined with C)
+	right join I/0 cost = (# of tuples in B joined with C) + (# of pages in B joined with C) * (# of tuples in A)
+	cost = min ((left join I/O cost), (right join I/O cost))
+Note: to calculate the resulting cost of the total join, you must add the previous best for joining B and C.
+
 
 (Walk thru 10) In lab 3, you write Join and Filter operators.  Both of these support the DbIterator interface.  When/where are these iterators called?
 
+	When we build the physical plan in LogicalPlan.physicalPlan, we add each filter on top of one another for each table, each time updating the subplan in subplanMap.  Before adding the first filter, we just start with a seqscan on the table.  When we update the subplan to include the filter, we make a call to the Filter constructor, which we pass the previous iterator and a new predicate to.
+
+	Similarly for Join, instantiateJoin returns a DbIterator from the Join object resulting from using the filtered DbIterators in subplanMap above.
+
+	Thus, DbIterators are feed to one another up the relational algebra tree and eventually we are left with one DbIterator which is used in Query.execute to pull tuples through the pipeline (i.e. calling next to the top most iterator calls next on all iterators below to pull tuples through the pipe).

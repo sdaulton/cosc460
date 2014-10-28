@@ -54,29 +54,33 @@ Walk thru 5: simpledb.LogicalPlan.physicalPlan()
 		We add the value 1.0 to filterSelectivities using table.alias as the key.
 	We then create an iterator over the filters vector (which contains filters in the logical plan).
 	For each filter:
-		we get the subplan for the table being filtered from subplanMap.  We get the TupleDesc for that table, the field type for the field being filtered, and the predicate used in thef ilter.  We then put the new filter in our subplan map with the key being the table alias.
+		we get the subplan for the table being filtered from subplanMap.  We get the TupleDesc for that table, the field type for the field being filtered, and the predicate used in the filter.  We then put the new filter in our subplan map with the key being the table alias.
 		We use the statsMap to get the TableStats, s, for the table being filtered and then use the s.estimateSelectivity method to get an estimate of the selectivity of the filter.  We then store this in filterSelectivities, using the table alias as the key.
-	We then create a new JoinOptimizer Object and use the orderJoins() method to create an efficient join on the tables.`
+	We then create a new JoinOptimizer Object and use the orderJoins() method to create an efficient join on the tables.
+	At this point joins is a vector of LogicalJoinNodes, where each node is basically a join of two tables.  For each such node in the vector, we use equivmap to get most accurate table alias for a relation.  Note that when we decide to join to tables, we store the resulting relation under the left table's (table1) alias, and add an entry to equivMap using the right table's alias a key.  Thus, if we try to join or access the rightmost table again, equivMap allows us to access the joined table (table1 join table2) using table2's alias.
+	We use the jo.instantiateJoin method to get an iterator for a join, store that iterator in the subplanMap under the left table's alias, and remove the bucket for which right table's alias is a key.  We then look for values in equivMap equal to right table's alias and change those values to be table1's alias.
+	We then create two ArrayLists to store the select output fields (the output fields we will project) in the order they will be projected in and types respectively by looking at each select in selectList.  We check for groupby and aggregates and orderbys in those selects, and if they exist we create a new node for each storing the field used the any other settings (i.e. ascending or descending order, the aggOp, etc.).
 
 Walk thru 6: simpledb.JoinOptimizer.orderJoins()
 
-	<fill this in>
+	Use Selinger-style dynamic programming to select the least cost join plan.  Slight modifications to the algorithm result from using join nodes instead of relations.  We conisder all linear plans since we can have a base table as either the outer or the inner relation in the join (vs left-deep where the base table must always be the inner).  We use computeCostAndCardofSubplan to determine the cost of joining a specified join node to the rest of the subplan.  In addition, we use enumerateSubsets to get all subsets of joins of a specified size.  The PlanCache class stores the estimated costs for joins already considered in the dynamic programming algorithm.  Moreover, filterSelectivites and Table stats are used to estimate these costs.
 
 Walk thru 7: JoinOptimizer.computeCostAndCardOfSubplan()
 
-	<fill this in>
+	Takes the subset of joins, a particular join to be joined last, the filterSelectivities, the TableStats, and the best cost so far for the subset, and the PlanCache as parameters and returns a CostCard object which is made up of the cost, size of the resulting relation, and best cost join ordering.  It uses previously best join ordering costs in PlanCache and stats from filter selectivities and Table stats to estimate the best join ordering when joining a particular join last.  To do so it selects the minimum of adding the cost of best join ordering of the subset to the cost of joining with the specified join as either the inner or outer relation
 
 Walk thru 8: JoinOptimizer.estimateJoinCost()
 
-	<fill this in>
+	Takes the size of each table (specified right and left) and the estimated costs of a full scan of each table and returns the estimated cost of the join (which is not only I/Os, but CPU operations as well-- but in our implementation it actually is only I/Os).  Assuming basic nested loops, the cost is cost1 + size1 * cost2 (where table1 is right and table 2 is left).
 
 Walk thru 9: JoinOptimizer.estimateJoinCardinality()
 
-	<fill this in>
+	Estimates the size of the relation that results from the join.  Makes a call to estimateTableJoinCardinality.  For equality operations, this returns the estimate: size1 * size2 /  max ( V(A, t1), V(B, t2)) where we are joining t1 with t2 where t1.A = T2.B and V(attr, table) is the number of distinct values for table.attr in table.  
+	For range queries, we return a fixed fraction of the proportional to input size (i.e. 30% of cross product size).  If either attribute is a primary key, we know that the size of the result is less than the size of the other table.
 
 Walk thru 10 query.execute()
 	
 	Note: This is called inside simpledb.Parser.processNextStatement().  Refer back to Walk thru 2.
 
-	<fill this in>
+	This actually executes the query.  The Query object has an iterator for the physical plan and executes the query by pulling tuples through the pipeline.  It prints out the fieldnames first, and then prints out each tuple that it pulls through the pipeline.
 

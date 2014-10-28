@@ -62,6 +62,7 @@ public class TableStatsTest extends SimpleDbTestBase {
         double stats[] = getRandomTableScanCosts(pageNums, ioCosts);
         ret = SystemTestUtil.checkConstant(stats);
         Assert.assertEquals(ret[0], Boolean.FALSE);
+        System.out.println("STATS: "+ stats[0]);
         ret = SystemTestUtil.checkLinear(stats);
         Assert.assertEquals(ret[0], Boolean.TRUE);
         // numPages constant, IO_COST change
