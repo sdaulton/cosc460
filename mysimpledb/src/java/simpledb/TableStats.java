@@ -119,11 +119,11 @@ public class TableStats {
     				}
     			}
     		}
-    		this.num_pages = num_tuples / (BufferPool.getPageSize() / td.getSize());
+    		this.num_pages = 1+ num_tuples / (BufferPool.getPageSize() / td.getSize());
 	    	this.stats = new Stats[num_columns];
 	    	for (int idx = 0; idx < num_columns; idx++) {
 	    		stats[idx] = new Stats();
-	    		if (td.getFieldType(0) == Type.INT_TYPE) {
+	    		if (td.getFieldType(idx) == Type.INT_TYPE) {
 	    			stats[idx].iHist = new IntHistogram(NUM_HIST_BINS, mins[idx], maxs[idx]);
 	    			stats[idx].sHist = null;
 	    		} else {

@@ -114,7 +114,7 @@ public class JoinOptimizer {
             // HINT: You may need to use the variable "j" if you implemented
             // a join algorithm that's more complicated than a basic
             // nested-loops join.
-            return -1.0;
+        	return cost1 + card1 * cost2;
         }
     }
 
@@ -154,6 +154,43 @@ public class JoinOptimizer {
                                                    Map<String, Integer> tableAliasToId) {
         int card = 1;
         // some code goes here
+        int tableId1 = tableAliasToId.get(table1Alias);
+        int tableId2 = tableAliasToId.get(table2Alias);
+        String table1Name = Database.getCatalog().getTableName(tableId1);
+        String table2Name = Database.getCatalog().getTableName(tableId2);
+        int fieldIdx1 = Database.getCatalog().getTupleDesc(tableId1).fieldNameToIndex(field1PureName);
+        int fieldIdx2 = Database.getCatalog().getTupleDesc(tableId2).fieldNameToIndex(field2PureName);
+        int numDist1 = stats.get(table1Name).numDistinctValues(fieldIdx1);
+        int numDist2 = stats.get(table2Name).numDistinctValues(fieldIdx2);
+        
+        int pkey_card = 0;
+        if (joinOp == Predicate.Op.EQUALS || joinOp == Predicate.Op.LIKE || joinOp == Predicate.Op.NOT_EQUALS) {
+        	//equality join
+        	
+        	if (t1pkey) {
+        		if (t2pkey) {
+        			if (card1 <= card2) {
+        				pkey_card = card2;
+        			} else {
+        				pkey_card = card1;
+        			}
+        				
+        		} else {
+        			pkey_card = card2;
+        		}
+        		
+        	} else if (t2pkey) {
+        		pkey_card = card1;
+        	}
+        	card = (new Double(Math.ceil(card1 * card2 / (new Double(Math.max(numDist1, numDist2)))))).intValue();
+        	if (t1pkey || t2pkey) {
+        		card = Math.min(card, pkey_card);
+        	}
+        } else {
+        
+        	// range join
+        	card = (int) Math.ceil((card1 * card2) / 3.0);
+        }
         return card <= 0 ? 1 : card;
     }
 
@@ -208,13 +245,56 @@ public class JoinOptimizer {
             HashMap<String, TableStats> stats,
             HashMap<String, Double> filterSelectivities, boolean explain)
             throws ParsingException {
-
+    	Catalog catalog = Database.getCatalog();
+    	LogicalJoinNode node = null;
+    	Iterator<Set<LogicalJoinNode>> subset_iter = null;
+    	Iterator<LogicalJoinNode> node_iter = null;
+    	Set<LogicalJoinNode> subset = null;
+    	Set<Set<LogicalJoinNode>> setX = null;
+    	Set<Set<LogicalJoinNode>> setY = null;
+    	Set<LogicalJoinNode> joins_set = null;
+    	Set<LogicalJoinNode> setS1 = null;
+    	Iterator<Set<LogicalJoinNode>> Y_iter = null;
+    	double bestSoFar = Double.POSITIVE_INFINITY;
+    	CostCard bestPlan = null;
+    	
+    	PlanCache pc = new PlanCache();
+    	CostCard cc = null; 	
         // See the Lab 4 writeup for some hints as to how this function
         // should work.
-
-        // some code goes here
-        //Replace the following
-        return joins;
+    	for (int numJoins = 1; numJoins <= joins.size(); numJoins++) {
+    		setX = enumerateSubsets(joins, numJoins);
+    		subset_iter = setX.iterator();
+    		while (subset_iter.hasNext()) {
+    			bestSoFar = Double.POSITIVE_INFINITY;
+    			bestPlan = null;
+    			subset = subset_iter.next();
+    			if (subset.size() == joins.size()) {
+    				joins_set = subset;
+    			}
+    			node_iter = subset.iterator();
+    			
+				while (node_iter.hasNext()) {
+					node = node_iter.next();
+					cc = computeCostAndCardOfSubplan(stats, filterSelectivities, node, subset, bestSoFar, pc);
+					if (cc != null) {
+							bestSoFar = cc.cost;
+							bestPlan = cc;
+					}
+					
+				}
+				if (bestPlan != null) {
+					pc.addPlan(subset, bestPlan.cost, bestPlan.card, bestPlan.plan);
+				}
+			}
+    	}
+    	if (explain) {
+    		// the order printed to console is irrelevant
+    		// the reason mine has last node bigTable:n is because Joining bigTable x n is cheaper 
+    		// than n x bigTable as in compare and calc function.  Is this wrong?  Joining nodes, involves joining those 2 tables first, no?
+    		printJoins(bestPlan.plan, pc, stats, filterSelectivities);
+    	}
+        return bestPlan.plan;
     }
 
     // ===================== Private Methods =================================
@@ -299,7 +379,6 @@ public class JoinOptimizer {
 
             double prevBestCost = pc.getCost(news);
             int bestCard = pc.getCard(news);
-
             // estimate cost of right subtree
             if (doesJoin(prevBest, table1Alias)) { // j.t1 is in prevBest
                 t1cost = prevBestCost; // left side just has cost of whatever
@@ -339,6 +418,7 @@ public class JoinOptimizer {
         double cost1 = estimateJoinCost(j, t1card, t2card, t1cost, t2cost);
 
         LogicalJoinNode j2 = j.swapInnerOuter();
+
         double cost2 = estimateJoinCost(j2, t2card, t1card, t2cost, t1cost);
         if (cost2 < cost1) {
             boolean tmp;

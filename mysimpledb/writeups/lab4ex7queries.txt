@@ -10,20 +10,59 @@ and a.fname='Ginger' and a.lname='Rogers';
 
 Query 1 optimizer's plan:
 
-<fill in here>
+The query plan is:
+                            π(d.fname,d.lname),card:2
+                            |
+                            ⨝(a.id=c.pid),card:2
+  __________________________|___________________________
+  |                                                    |
+  σ(a.lname=Rogers),card:1                             ⨝(m.mid=c.mid),card:29729
+  |                                    ________________|_________________
+  σ(a.fname=Ginger),card:1             |                                |
+  |                                    ⨝(d.id=m.did),card:2791          |
+  |                           _________|_________                       |
+  |                           |                 |                     scan(Casts c)
+scan(Actor a)               scan(Director d)  scan(Movie_Director m)
+
 
 Query 1 plan explanation:
 
-<fill in here>
+The query plan uses (the filter on Actor) as the left most relation in the join algorithm since the card of (filtered Actor) is 1.  Since using nested loops join, the cost of the join = cost1 + card1*card2.  Since we push all filters down, the card and cost of filtered Actors are both one.  Clearly this minimizes the estimated total join cost since cardinalities of the other relations (which are all unfiltered basetables) are greater, and using the filtered Actors as the left most join makes the total join cost = 1 + 1*(cost of right half of subtree).  
+
+Now, consider the right subtree: Director is the furtherest left relation since there are less Directors than Movies and less directors than casts.  We must join Director with Movie_Director, since we need to check m.did=d.id.  Then we join that relation with Casts.  This is the most efficient way of doing this since Director, the smallest relation is the furthest left.  
+
+The projection is applied at the top of the tree after the last join.
 
 Query 2:
 
-<fill in here>
+select m.name, m.year
+from Movie m, Movie_Director md, Director d, Casts c, Actor a
+where a.lname='Affleck' and a.fname='Ben' and d.lname='Affleck'
+and d.fname='Ben' and d.id=md.did and md.mid=m.id and c.mid=m.id and a.id=c.pid;
 
-Query 1 optimizer's plan:
+Query 2 optimizer's plan:
 
-<fill in here>
+The query plan is:
+                             π(m.name,m.year),card:1
+                             |
+                             ⨝(d.id=md.did),card:1
+  ___________________________|___________________________
+  |                                                     |
+  σ(d.fname=Ben),card:1                                 ⨝(a.id=c.pid),card:1
+  |                            _________________________|_________________________
+  σ(d.lname=Affleck),card:1    |                                                 |
+  |                            σ(a.fname=Ben),card:1                             ⨝(m.id=md.mid),card:2791
+  |                            |                                   ______________|______________
+  |                            σ(a.lname=Affleck),card:1           |                           |
+  |                            |                                   ⨝(m.id=c.mid),card:29729    |
+  |                            |                            _______|________                   |
+scan(Director d)               |                            |              |                 scan(Movie_Director md)
+                             scan(Actor a)                scan(Movie m)  scan(Casts c)
 
-Query 1 plan explanation:
 
-<fill in here>
+Query 2 plan explanation:
+
+
+Since filtered Director and filtered Actor both have card = 1, we want them as far left as we can get them so that we just both their costs and card in the total cost: i.e. since total cost= cost1 + card1*cost2, we minimize total cost.  Now consider the right subtree of Movie, Casts, and Movie Director.  Note that all three base tables presumably have the same cardinality since nearly every movie has a cast and director.  Therefore, join order of this subtree is fully optimized given our current query optimization since our outputed cardinality estimate depends only on the cardinalities of the base tables.  Since they all have the cardinalities, we estimate the same output cardinality when we join any 2 of the 3 base tables.
+
+Thus our query is optimized given our current optimization algorithm.
