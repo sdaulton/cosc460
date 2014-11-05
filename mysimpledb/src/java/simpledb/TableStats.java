@@ -119,7 +119,7 @@ public class TableStats {
     				}
     			}
     		}
-    		this.num_pages = 1+ num_tuples / (BufferPool.getPageSize() / td.getSize());
+    		this.num_pages =  Math.ceil(num_tuples / (BufferPool.getPageSize() / new Double(td.getSize())));
 	    	this.stats = new Stats[num_columns];
 	    	for (int idx = 0; idx < num_columns; idx++) {
 	    		stats[idx] = new Stats();
