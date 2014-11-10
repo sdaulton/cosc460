@@ -55,7 +55,7 @@ public class BufferPool {
     /**
      * LockManager for the DB
      */
-    public LockManager  lockManager;
+    private LockManager  lockManager;
     
     
     /**

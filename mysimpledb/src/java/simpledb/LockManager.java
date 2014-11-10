@@ -109,6 +109,7 @@ public class LockManager {
     		pageQ = new LinkedList<LockNode>();
     		LockNode txn = new LockNode(t,p);
     		txn.getLock();
+    		pageQ.addLast(txn);
     		lockTable.put(p, pageQ);
     		//return some value indicating lock was awarded
     		return true;
@@ -126,6 +127,7 @@ public class LockManager {
    			}
     		// transaction t is not in the page Q
     		pageQ.addLast(new LockNode(t,p));
+    		lockTable.put(p, pageQ);
     		return false;
    		}
     }
@@ -159,8 +161,7 @@ public class LockManager {
     	acquireLockManagerLock();
     	// has lock for LockManager
     	LinkedList<LockNode> pageQ = lockTable.get(p);
-    	assert(pageQ != null);
-    	assert((pageQ.getFirst().getTransactionId()).equals(t));
+    	
     	pageQ.removeFirst();
     	if (!pageQ.isEmpty()) {
     		// give lock to next txn in line
