@@ -124,7 +124,7 @@ public class IntegerAggregator implements Aggregator {
     		} else {
     			//AVG
     			int count = countsMap.get(key).intValue();
-    			agg_int = (agg_int * (count -1) + next_int)/count;
+    			agg_int = (agg_int * (count - 1) + next_int)/count;
     		}
     		f = new IntField(agg_int);
     	}

@@ -52,6 +52,10 @@ public class BufferPool {
      */
     public LinkedList<PageId> evict_list; 
     
+    /**
+     * LockManager for the DB
+     */
+    public LockManager  lockManager;
     
     
     /**
@@ -64,6 +68,7 @@ public class BufferPool {
         this.pageCount = 0;
         this.pages = new Page[numPages];
         this.evict_list = new LinkedList<PageId>();
+        this.lockManager = new LockManager(this.numPages);
     }
 
     public static int getPageSize() {
@@ -92,7 +97,10 @@ public class BufferPool {
      */
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
-        for (int i = 0; i < this.numPages; i++) {
+        // get lock for the page
+    	lockManager.acquirePageLock(tid, pid);
+    		
+    	for (int i = 0; i < this.numPages; i++) {
         	// If the page is in the BufferPool, return it
         	
         	if (this.pages[i] != null){
@@ -103,7 +111,6 @@ public class BufferPool {
         		}
         	}
         }
-        // If the page is not in the BufferPool and the BufferPool is full, throw exception
         if (this.pageCount >= this.numPages) {
         	evictPage();
         	this.pageCount -= 1;
@@ -134,8 +141,7 @@ public class BufferPool {
      * @param pid the ID of the page to unlock
      */
     public void releasePage(TransactionId tid, PageId pid) {
-        // some code goes here
-        // not necessary for lab1|lab2|lab3|lab4                                                         // cosc460
+        lockManager.releasePageLock(tid, pid);
     }
 
     /**
@@ -152,9 +158,7 @@ public class BufferPool {
      * Return true if the specified transaction has a lock on the specified page
      */
     public boolean holdsLock(TransactionId tid, PageId p) {
-        // some code goes here
-        // not necessary for lab1|lab2|lab3|lab4                                                         // cosc460
-        return false;
+        return lockManager.holdsLock(tid, p);
     }
 
     /**
@@ -300,7 +304,7 @@ public class BufferPool {
     			page = pages[i];
     			if (pages[i].getId().equals(pid)) {
     				if (page.isDirty() != null) {
-    					page.markDirty(false, new TransactionId());
+    					page.markDirty(false, null);
     					file.writePage(page);
     				}
     				break;

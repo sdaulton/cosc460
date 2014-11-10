@@ -52,8 +52,8 @@ public class HeapPageId implements PageId {
      */
     public int hashCode() {
     	// Concatenate tableId and page number and return as int
-    	String hash_pid = "" + this.tableId + this.pgNo;
-        return Integer.parseInt(hash_pid);
+    	int hash_pid = (int) ((this.tableId * Math.pow(10, ((Integer.valueOf(this.pgNo)).toString()).length()) + this.pgNo) % Math.pow(2, 15));
+        return hash_pid;
     }
 
     /**

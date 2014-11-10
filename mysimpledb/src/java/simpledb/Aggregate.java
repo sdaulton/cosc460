@@ -37,7 +37,6 @@ public class Aggregate extends Operator {
      */
     public Aggregate(DbIterator child, int afield, int gfield, Aggregator.Op aop) {
         this.child = child;
-
         this.aggfield = afield;
         this.gbfield = gfield;
         this.aggOp = aop;
@@ -173,7 +172,9 @@ public class Aggregate extends Operator {
 
     @Override
     public void setChildren(DbIterator[] children) {
-        this.child = children[0];
+        if (children.length == 1) {
+        	this.child = children[0];
+        }
     }
 
 }

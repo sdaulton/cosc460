@@ -240,6 +240,7 @@ public class HeapFile implements DbFile {
         	} else if (this.current_page_num + 1 < this.num_pages) {
         		this.current_page_num++;
             	set_tuple_iter();
+            	open();
             	return this.hasNext();
         	}
         	return false;
