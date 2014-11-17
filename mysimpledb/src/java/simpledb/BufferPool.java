@@ -98,7 +98,13 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
         // get lock for the page
-    	lockManager.acquirePageLock(tid, pid);
+    	if (perm.permLevel == 0) {
+    		// shared
+    		lockManager.acquirePageLock(tid, pid, false);
+    	} else {
+    		// exclusive
+    		lockManager.acquirePageLock(tid, pid, true);
+    	}
     		
     	for (int i = 0; i < this.numPages; i++) {
         	// If the page is in the BufferPool, return it
@@ -158,7 +164,7 @@ public class BufferPool {
      * Return true if the specified transaction has a lock on the specified page
      */
     public boolean holdsLock(TransactionId tid, PageId p) {
-        return lockManager.holdsLock(tid, p);
+        return lockManager.holdsLock(tid, p, false);
     }
 
     /**
