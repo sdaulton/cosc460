@@ -67,6 +67,13 @@ public class LockManager {
 		this.lockTable = new HashMap<PageId, LockEntry>(numPages);
 	}
     
+	public void removePage(PageId pid) {
+		acquireLockManagerLock();
+		lockTable.remove(pid);
+		//DO I NEED TO ABORT TRANSACTIONS THAT ARE USING THIS PAGE?
+		releaseLockManagerLock();
+	}
+	
 	//used to acquire the lock for the lock manager
     private void acquireLockManagerLock() {
     	boolean waiting = true;

@@ -118,11 +118,25 @@ public class HeapFile implements DbFile {
         HeapPage page = null;
         boolean page_has_space = false; // indicates if page has an open slot
         for (int i = 0; i < numPages(); i++) {
-        	page = (HeapPage) bp.getPage(tid, (new HeapPageId(tableId, i)), Permissions.READ_WRITE);
+        	HeapPageId pid = new HeapPageId(tableId, i);
+        	page = (HeapPage) bp.getPage(tid, pid, Permissions.READ_ONLY);
         	if (page.getNumEmptySlots() > 0) {
         		// page has an open slot
+        		page = (HeapPage) bp.getPage(tid, pid, Permissions.READ_WRITE);
         		page_has_space = true;
         		break;
+        	} else {
+        		if (i != numPages()-1) {
+        			bp.releasePage(tid, pid);
+        		} else {
+        			// IS THIS RIGHT??
+        			// we are going to get a new page, make sure no one is writing to the page
+        			// before the new page in the heapfile
+        			// this hopefully ensures that no one can create a new page at the same time
+        			// since they would first need to get a shared lock on this page and look 
+        			// for empty tuple slots
+        			page = (HeapPage) bp.getPage(tid, pid, Permissions.READ_WRITE);
+        		}
         	}
         }
         if (page_has_space){
@@ -131,9 +145,9 @@ public class HeapFile implements DbFile {
         } else {
         	// all pages are full -> create new page
         	int pgNo = numPages();
-        	HeapPage new_page = new HeapPage((new HeapPageId(tableId, pgNo)), HeapPage.createEmptyPageData());
-        	//new_page.insertTuple(t);
-        	HeapPageId pid = new_page.getId();
+        	HeapPageId pid = new HeapPageId(tableId, pgNo);
+        	HeapPage new_page = new HeapPage(pid, HeapPage.createEmptyPageData());
+        	
         	OutputStream output = new BufferedOutputStream(new FileOutputStream(f, true), BufferPool.getPageSize());
         	output.write(new_page.getPageData(),0, BufferPool.getPageSize());
            	output.flush();
@@ -141,6 +155,7 @@ public class HeapFile implements DbFile {
            	page = (HeapPage) bp.getPage(tid, pid, Permissions.READ_WRITE);
            	page.insertTuple(t);
         }
+        page.markDirty(true, tid);
         ArrayList<Page> modified_pages = new ArrayList<Page>();
         modified_pages.add(page);
         return modified_pages;
@@ -156,6 +171,7 @@ public class HeapFile implements DbFile {
     	}
         HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, t.rid.pid, Permissions.READ_WRITE);
         page.deleteTuple(t);
+        page.markDirty(true, tid);
         ArrayList<Page> modified_pages = new ArrayList<Page>();
         modified_pages.add(page);
         return modified_pages;

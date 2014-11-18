@@ -5,7 +5,9 @@ import java.io.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import java.util.ArrayList; //I ADDED THIS, AM I ALLOWED TO?
+import java.util.Arrays;
 import java.util.LinkedList; //AND THIS?
+import java.lang.Boolean;
 /**
  * BufferPool manages the reading and writing of pages into memory from
  * disk. Access methods call into it to retrieve pages, and it fetches
@@ -50,12 +52,13 @@ public class BufferPool {
     /**
      * LinkedList of pages in the buffer pool, the head of the list is the most recently used page, the tail is the least
      */
-    public LinkedList<PageId> evict_list; 
+    private LinkedList<PageId> evict_list; 
+    private LinkedList<Boolean> dirt_check_list;
     
     /**
      * LockManager for the DB
      */
-    private LockManager  lockManager;
+    private LockManager lockManager;
     
     
     /**
@@ -68,6 +71,7 @@ public class BufferPool {
         this.pageCount = 0;
         this.pages = new Page[numPages];
         this.evict_list = new LinkedList<PageId>();
+        this.dirt_check_list = new LinkedList<Boolean>();
         this.lockManager = new LockManager(this.numPages);
     }
 
@@ -111,6 +115,9 @@ public class BufferPool {
         	
         	if (this.pages[i] != null){
         		if (this.pages[i].getId().equals(pid)) {
+        			int idx = evict_list.indexOf(pid);
+        			dirt_check_list.remove(idx);
+        			dirt_check_list.addFirst(java.lang.Boolean.valueOf(false));
         			evict_list.remove(pid); // remove the instance of pid in the linked list
         			evict_list.addFirst(pid); // add the instance of pid to the head of the linked list
         			return this.pages[i];
@@ -133,6 +140,7 @@ public class BufferPool {
         }
         this.pages[first_empty] = file.readPage(pid);
         this.pageCount++;
+        dirt_check_list.addFirst(Boolean.valueOf(false));
         evict_list.addFirst(pid);
         return this.pages[first_empty];
     }
@@ -205,6 +213,12 @@ public class BufferPool {
         	page = modified_pages.get(i);
         	if (page != null) {
         		page.markDirty(true, tid);
+        		PageId pid = page.getId();
+        		int idx = evict_list.indexOf(pid);
+        		if (idx != -1) {
+        			dirt_check_list.set(idx, Boolean.valueOf(true));
+        		}
+        		
         		for (int j = 0; j < numPages; j++) {
         			if (pages[j] != null) {
         				if (pages[j].getId().equals(page.getId())) {
@@ -333,9 +347,20 @@ public class BufferPool {
      * Flushes the page to disk to ensure dirty pages are updated on disk.
      */
     private synchronized void evictPage() throws DbException {
-        // some code goes here
-        // not necessary for lab1
-    	PageId pid = evict_list.removeLast();
+    	PageId pid = null;
+    	ArrayList<Page> pagelist = new ArrayList<Page>(Arrays.asList(pages));
+    	for (int i = evict_list.size() - 1; i >= 0; i--) {
+    		if (!dirt_check_list.get(i)) {
+    			lockManager.removePage(pid);
+    			//if page not dirty
+    			pid = evict_list.remove(i);
+    			dirt_check_list.remove(i);
+    		}
+    	}
+    	if (pid == null) {
+    		throw new DbException("No clean pages in buffer pool, so could not evict a page!");
+    	}
+    	
     	try{
     		flushPage(pid);
     	} catch (IOException e) {
