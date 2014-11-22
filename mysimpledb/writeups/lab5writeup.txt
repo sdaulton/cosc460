@@ -13,15 +13,15 @@ After you complete lab 5, please answer the following questions.
 
 3. What was the hardest part of this assignment?
 
-	The hardest part was definitely just adapting my original LockManager to included shared lock capability.  I ended up essentially trashing my entire first LockManager and writing a new one with a completely different structure.  
+	The hardest part was probably just adapting my original LockManager to included shared lock capability.  I ended up essentially trashing my entire first LockManager and writing a new one with a completely different structure.  Also, adding timeouts was tricky as I had several successful runs of the unit tests, only to find out that I was just getting lucky, and subsequently failed a few tests.  Now, everything works though.
 
 4. Describe any missing or incomplete elements of your code.
 
-	My timeouts are not quite working correctly.
+	To my knowledge all the code working correctly
 
 5. Roughly how long did you spend working on this lab?
 
-	Really hard to say, as this lab has been like a two-week project.  A LONG time.
+	Really hard to say, as this lab has been like a two-week project.  A LONG time. Probably 25+ hours.
 
 6. Describe your lock manager implementation.  Here are some specific questions to answer:
 
@@ -45,7 +45,12 @@ b) What specific information do you store and how do you store it?
 		a PageId
 		a TransactionId
 		a boolean indicating the type of lock.
-	The abort_list is only used for timelists.  If a txn times out waiting for a lock, it adds all txns currently holding the lock it wants to the abort_list.  The abort_list is consulted whenever a txn waits for a lock.
+
+	In BufferPool, I also have several data structures:
+		evict_list - a LinkedList of PageId for all pages currently in the BufferPool.  The evict list is order based on LRU.
+		dirt_check_list - a LinkedList of Boolean objects, one for each page in the BufferPool, indicating if the page is dirty.
+		tid_locks -  a Hashmap TransactionId --> LinkedList of PageIds: for each current transaction, this maps to a list of pageIds that the txn is either currently waiting for a lock for or currently holds a lock for.
+		tid_time - a Hashmap TranactionId --> Long Object: the Long Object is the time that the transaction began.  I have implemented timeouts such that a transaction times out after running for 10 seconds
 
 c) Briefly describe what happens when a new transaction requests a page.  I.e., walk thru how the lock manager decides whether or not to grant the request.  Your description should reference the data structures that describe in part (b).
 
@@ -59,8 +64,8 @@ NOTE: whenever I say add the txn to the waiting queue, that means create a new L
 Now, put the LockEntry into the lockTable (hashmap) using the PageId as the key.
 
 If the lock was awarded, return all the way back to the BufferPool (and implicitly release the lock for the LockManager).  If the lock was not awarded, enter the waitForLock method, where the transaction spins as it waits for the lock.
-When a txn releases a page, the lock is given to the next txn in the waiting queue in the releasePageLock method or multiple txns if the type of lock requested is shared and there are multiple consecutive shared requests at the top of the waiting list.  Also, in WaitsForLock, the txn can timeout after 2 seconds at which point it aborts.
-
+When a txn releases a page, the lock is given to the next txn in the waiting queue in the releasePageLock method or multiple txns if the type of lock requested is shared and there are multiple consecutive shared requests at the top of the waiting list.
+ 
 d) Briefly explain how you manage locks when inserting a tuple into a HeapFile.  In particular, how do you acquire/release locks when looking for a page to insert.
 
 	A txn acquires the lock for the BufferPool and then acquires shared locks to check if pages have any free slots.  If it finds a page with a free slot, it requests an upgrade for the lock for that page and then inserts the tuple.  If no page in the HeapFile has a free slot, the txn requests an upgrade for the last page of the Heapfile, thus no other txn can insert a new page to the Heapfile, since I mandate that a txn hold an exclusive lock for the current last page of the Heapfile.  The txn then creates a new blank page and adds it to the heapfile and immediately flushes the new page to disk.  Then the BufferPool gets the page from disk (which gets its lock from the LockManager), and the txn inserts the tuple, marks the page as dirty.  Then the txn releases the lock for the (now) penultimate page

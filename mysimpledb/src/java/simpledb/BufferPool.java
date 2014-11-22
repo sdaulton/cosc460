@@ -59,6 +59,8 @@ public class BufferPool {
     private LinkedList<PageId> evict_list; 
     private LinkedList<Boolean> dirt_check_list;
     private HashMap<TransactionId, LinkedList<PageId>> tid_locks;
+    public HashMap<TransactionId, Long> tid_time;
+    public final int TIMEOUT = 10000;
     
     /**
      * LockManager for the DB
@@ -79,6 +81,7 @@ public class BufferPool {
         this.dirt_check_list = new LinkedList<Boolean>();
         this.lockManager = new LockManager(this.numPages);
         this.tid_locks = new HashMap<TransactionId, LinkedList<PageId>>();
+        this.tid_time = new HashMap<TransactionId, Long>();
     }
 
     public static int getPageSize() {
@@ -108,6 +111,26 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
     	// get lock for the page
+    	Page page = null;
+    	LinkedList<PageId> pagelist = null;
+    	synchronized(this){
+	    	if (!tid_time.containsKey(tid)) {
+	    		tid_time.put(tid, System.currentTimeMillis());
+	    	} else {
+	    		if (System.currentTimeMillis() > tid_time.get(tid) + TIMEOUT) {
+	    			System.out.println("aborted Thread " +tid.getId());
+	    			throw new TransactionAbortedException();
+	    		}
+	    	}
+	    	pagelist = tid_locks.get(tid);
+	    	if (pagelist == null) {
+	    		pagelist = new LinkedList<PageId>();
+	    		pagelist.add(pid);
+	    	} else if (!pagelist.contains(pid)){
+	    		pagelist.add(pid);
+	    	}
+    	}
+    	
     	if (perm.permLevel == 0) {
     		// shared
     		lockManager.acquirePageLock(tid, pid, false);
@@ -118,7 +141,7 @@ public class BufferPool {
     	}
     	Page retPage = null;
     	synchronized(this) {
-    		Page page = null;
+    		/*Page page = null;
 	    	LinkedList<PageId> pagelist = tid_locks.get(tid);
 	    	if (pagelist == null) {
 	    		pagelist = new LinkedList<PageId>();
@@ -126,7 +149,8 @@ public class BufferPool {
 	    	} else if (!pagelist.contains(pid)){
 	    		pagelist.add(pid);
 	    	}
-	    	System.out.println("page_list size " + pagelist.size());
+	    		*/
+	    	//System.out.println("page_list size " + pagelist.size());
 	    	
 	    	boolean cleanpages = false;
 	    	for (int i = 0; i < this.numPages; i++) {
@@ -149,11 +173,8 @@ public class BufferPool {
 	        		}
 	        	}
 	        }
-	    	System.out.println(cleanpages);
+	    	//System.out.println(cleanpages);
 	    	if (page == null) {
-	    		System.out.println(pageCount);
-	        	System.out.println(this.numPages);
-	        	System.out.println(evict_list.size());
 		        if (this.pageCount >= this.numPages) {
 		        	
 		        	evictPage();
@@ -271,7 +292,9 @@ public class BufferPool {
 		        		releasePage(tid, pid);
 	        		}
 	        	}
+	        	
 	        }
+	        tid_time.remove(tid);
     	}
     }
 
@@ -289,6 +312,13 @@ public class BufferPool {
     		throws DbException, IOException, TransactionAbortedException {
     	Catalog catalog = Database.getCatalog();
         synchronized (this) {
+        	if (!tid_time.containsKey(tid)) {
+	    		tid_time.put(tid, System.currentTimeMillis());
+	    	} else {
+	    		if (System.currentTimeMillis() > tid_time.get(tid) + TIMEOUT) {
+	    			throw new TransactionAbortedException();
+	    		}
+	    	}
 	    	DbFile file = catalog.getDatabaseFile(tableId);
 	        ArrayList<Page> modified_pages = null;
 	        if (isInsert) {
@@ -438,7 +468,6 @@ public class BufferPool {
     	if (pid_list == null) {
     		return;
     	}
-    	System.out.println("pid size " + pid_list.size());
         	while (!pid_list.isEmpty()) {
         		PageId pid = pid_list.removeFirst();
         		int idx = evict_list.indexOf(pid);

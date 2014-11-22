@@ -82,6 +82,7 @@ public class LockManager {
     	synchronized(this) {
 	    	// now has lock for lock manager
 	    	lockHeld = requestLock(t,p, requestedX);
+	    	System.out.println("Thread " + t.getId() + "got Lock? " + lockHeld+ " Page " + p.pageNumber());
 	    	// request has been entered
     	}
     	//releaseLockManagerLock();
@@ -105,7 +106,7 @@ public class LockManager {
     		}
     	}
     	if (lock == null) {
-    		System.out.println("at 0");
+    		System.out.println("at 0 Thread " +t.getId() + " Page " + p.toString() + "requestedX" + requestedX);
     		lock = new LockEntry(p);
     		lock.grantedT.addLast(t);
     		lock.typeIsX = requestedX;
@@ -117,54 +118,54 @@ public class LockManager {
     		//txn has a lock
     		if (lock.typeIsX) {
 				//already has exclusive lock
-    			System.out.println("at 1");
+    			System.out.println("at 1 Thread " +t.getId() + " Page " + p.toString() + "requestedX" + requestedX);
     			lockTable.put(p, lock);
 				return true;
 			} else if (requestedX) {
 				//has shared, but requested exclusive --> UPGRADE
 				if (lock.grantedT.size() == 1) {
 					// only this txn has a lock right now
-					System.out.println("at 2");
+					System.out.println("at 2 Thread " +t.getId() + " Page " + p.toString() + "requestedX" + requestedX);
 					lock.typeIsX = true;
 					lockTable.put(p, lock);
 					return true;
 				} else {
 					// other transactions also have locks currently
-					System.out.println("at 3");
+					System.out.println("at 3 Thread " +t.getId() + " Page " + p.toString() + "requestedX" + requestedX);
 					lock.waiting.addFirst(txn);
 					lockTable.put(p, lock);
 					return false;
 				}
 			} else {
 				// has at least shared, requested shared
-				System.out.println("at 4");
+				System.out.println("at 4 Thread " +t.getId() + " Page " + p.toString() + "requestedX" + requestedX);
 				lockTable.put(p, lock);
 				return true;
 			}
     	} else if (!lock.waiting.isEmpty()) {
     		//check if this txn is already waiting for the lock
-    		if (updateWaiting(txn, lock)) {
+    		if (updateWaiting(txn, lock, false)) {
     			// txn is already waiting -- updates request type as well
-    			System.out.println("at 5");
+    			System.out.println("at 5 Thread " +t.getId() + " Page " + p.toString() + "requestedX" + requestedX);
     			return false;
     		} else {
     			//this txn is not waiting, not granted, and waiting is not empty
-    			System.out.println("at 6");
+    			System.out.println("at 6 Thread " +t.getId() + " Page " + p.toString() + "requestedX" + requestedX);
     			gotLock = false;
     		} 
 		} else if (lock.grantedT.isEmpty()) {
     		// no txns waiting, lock is free
-			System.out.println("at 7");
+			System.out.println("at 7 Thread " +t.getId() + " Page " + p.toString() + "requestedX" + requestedX);
 			gotLock = true;
     	} else if(lock.waiting.isEmpty()) {
     		//another txn is holding the hold, but the waiting list is empty
     		if(!lock.typeIsX && !requestedX){
-    			System.out.println("at 8");
+    			System.out.println("at 8 Thread " +t.getId() + " Page " + p.toString() + "requestedX" + requestedX);
     			gotLock = true;
     		} else {
     			System.out.println(lock.grantedT.getFirst());
     			// either the txn holding or txn requesting has a exclusive lock
-    			System.out.println("at 9");
+    			System.out.println("at 9 Thread " +t.getId() + " Page " + p.toString() + "requestedX" + requestedX);
     			gotLock = false;
     		}
     	}
@@ -184,8 +185,20 @@ public class LockManager {
     
     public synchronized LockEntry updateLock(LockEntry lock) {
     	// give the lock to the next node
+    	BufferPool bp = Database.getBufferPool();
     	LockNode node = lock.waiting.removeFirst();
+    	System.out.println("given to Thread "+ node.tid.getId());
     	lock.grantedT.add(node.tid);
+    	synchronized (bp) {
+    		if (bp.tid_time == null) {
+    			System.out.println("tid_time is null");
+    		} else if (bp.tid_time.remove(node.tid) == null) {
+    			System.out.println("tid_time doesnt contain node.tid");
+    		}
+    		if (bp.tid_time.containsKey(node.tid)) {
+    			bp.tid_time.put(node.tid, (bp.tid_time.remove(node.tid) + bp.TIMEOUT));
+    		}
+    		}
     	lock.typeIsX = node.typeIsX;
     	if (lock.typeIsX) {
     		//exclusive given
@@ -197,6 +210,10 @@ public class LockManager {
     			if (!node.typeIsX) {
     				//shared
     				lock.grantedT.add(node.tid);
+    				synchronized (bp) {
+    		    		bp.tid_time.put(node.tid, bp.tid_time.remove(node.tid) + bp.TIMEOUT);
+    		    	}
+    				System.out.println("and given to Thread "+ node.tid.getId());
     			} else {
     				//exclusive, put back on waiting list
     				lock.waiting.addFirst(node);
@@ -220,6 +237,7 @@ public class LockManager {
 	    	LockEntry lock = lockTable.get(p);
 	    	if ((lock.grantedT.contains(t)) && ((lock.typeIsX) || (checkX == lock.typeIsX))) {
 	    		hasLock = true;
+	    		System.out.println("Thread "+ t.getId() + "got lock from waitlist for page " + p.toString());
 	    	}
     	}
     	//releaseLockManagerLock();
@@ -228,15 +246,20 @@ public class LockManager {
     
     //method to make txn wait until it receives the lock for the page
     private void waitForLock(TransactionId t, PageId p, boolean requestedX) throws TransactionAbortedException {
+    	BufferPool bp = Database.getBufferPool();
     	
-    	int timeout = 0;
     	while (holdsLock(t,p, requestedX) == false) {
-    		//System.out.println("waiting");
-    		//System.out.println(timeout + "Thread "+ t.getId());
-    		//long timestart =  System.currentTimeMillis();
+    		synchronized(bp) {
+        		if (System.currentTimeMillis() > bp.tid_time.get(t) + bp.TIMEOUT) {
+        			System.out.println("aborted Thread " +t.getId());
+        			throw new TransactionAbortedException();
+        		}
+        	}
+    		System.out.println("waiting"+ "Thread "+ t.getId());
+    		
     		//acquireLockManagerLock();
     		
-    		synchronized(this) {
+    		/*synchronized(this) {
     			if(abort_list != null && !abort_list.isEmpty()){
     	    		System.out.println(abort_list.size());
     	    		if (abort_list.size() != 0){
@@ -253,18 +276,16 @@ public class LockManager {
 	    			throw new TransactionAbortedException();
 	    			
 	    		}
-    		}
+    		}*/
     		//releaseLockManagerLock();
     		try {
-    			Thread.sleep(300);
-    			timeout++;
+    			Thread.sleep(500);
+    			//timeout++;
     			} catch (InterruptedException ignored) {}
-    		/*if (System.currentTimeMillis() - timestart < 4000) {
-    			System.out.println("aborted "+ t.getId());
-    			throw new TransactionAbortedException();
-    		}*/
-    		if (timeout >=2) {
-    			throw new TransactionAbortedException();
+    		
+    		//if (timeout >=2) {
+    			//System.out.println("aborted "+ t.getId());
+    			//throw new TransactionAbortedException();
     			// abort all txns holding the lock
     			//System.out.println("aborted");
     			//acquireLockManagerLock();
@@ -282,7 +303,7 @@ public class LockManager {
 	    			lockTable.put(p, lock);
     			}*/
     			//releaseLockManagerLock();
-    		}
+    		//}
     		//if(timeout == 6) {
     			//throw new TransactionAbortedException();
     		//}
@@ -304,15 +325,14 @@ public class LockManager {
 	    	if (lock.grantedT.isEmpty()) {
 	    		System.out.println("granted is empty");
 	    	}
+	    	updateWaiting(new LockNode(t,p,false),lock, true);
+	    	lock = lockTable.get(p);
 	    	if ((lock.typeIsX || lock.grantedT.isEmpty()) && (!lock.waiting.isEmpty())) {
 	    		//lock was exclusive
-	    		System.out.println("updating");
+	    		System.out.println("giving to lock tonextwaiting");
 	    		lock = updateLock(lock);
 	    	}
 	    	lockTable.put(p, lock);
-	    	if(lockTable.get(p).grantedT.isEmpty()) {
-	    		System.out.println("still empty");
-	    	}
     	}
     	//releaseLockManagerLock();
     }
@@ -321,15 +341,21 @@ public class LockManager {
 
     // checks if the LockNode is already waiting, if so, it updates the node to reflect 
     // the lock type requested and returns true, else returns false
-    private boolean updateWaiting(LockNode txn, LockEntry lock) {
-    	LinkedList<LockNode> waiting = lock.waiting;
+    private synchronized boolean updateWaiting(LockNode txn, LockEntry lock, boolean abort) {
     	for (int i = 0; i < lock.waiting.size(); i++){
     		LockNode node = lock.waiting.get(i);
     		if (node.getTransactionId().equals(txn.getTransactionId())) {
-				node.typeIsX = (node.typeIsX || txn.typeIsX);
-				lock.waiting.add(i, node);
-				lockTable.put(txn.pid, lock);
-	    		return true;
+    			if (!abort) {
+					node.typeIsX = (node.typeIsX || txn.typeIsX);
+					lock.waiting.add(i, node);
+					lockTable.put(txn.pid, lock);
+		    		return true;
+    			} else {
+    				//abort
+    				lock.waiting.remove(node);
+    				lockTable.put(txn.pid, lock);
+    				return true;
+    			}
     		}
     	}
     	return false;
