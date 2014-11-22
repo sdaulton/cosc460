@@ -6,8 +6,12 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import java.util.ArrayList; //I ADDED THIS, AM I ALLOWED TO?
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList; //AND THIS?
 import java.lang.Boolean;
+
+import simpledb.LockManager.LockNode;
 /**
  * BufferPool manages the reading and writing of pages into memory from
  * disk. Access methods call into it to retrieve pages, and it fetches
@@ -54,6 +58,7 @@ public class BufferPool {
      */
     private LinkedList<PageId> evict_list; 
     private LinkedList<Boolean> dirt_check_list;
+    private HashMap<TransactionId, LinkedList<PageId>> tid_locks;
     
     /**
      * LockManager for the DB
@@ -73,6 +78,7 @@ public class BufferPool {
         this.evict_list = new LinkedList<PageId>();
         this.dirt_check_list = new LinkedList<Boolean>();
         this.lockManager = new LockManager(this.numPages);
+        this.tid_locks = new HashMap<TransactionId, LinkedList<PageId>>();
     }
 
     public static int getPageSize() {
@@ -101,48 +107,82 @@ public class BufferPool {
      */
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
-        // get lock for the page
+    	// get lock for the page
     	if (perm.permLevel == 0) {
     		// shared
     		lockManager.acquirePageLock(tid, pid, false);
     	} else {
     		// exclusive
     		lockManager.acquirePageLock(tid, pid, true);
-    	}
     		
-    	for (int i = 0; i < this.numPages; i++) {
-        	// If the page is in the BufferPool, return it
-        	
-        	if (this.pages[i] != null){
-        		if (this.pages[i].getId().equals(pid)) {
-        			int idx = evict_list.indexOf(pid);
-        			dirt_check_list.remove(idx);
-        			dirt_check_list.addFirst(java.lang.Boolean.valueOf(false));
-        			evict_list.remove(pid); // remove the instance of pid in the linked list
-        			evict_list.addFirst(pid); // add the instance of pid to the head of the linked list
-        			return this.pages[i];
-        		}
-        	}
-        }
-        if (this.pageCount >= this.numPages) {
-        	evictPage();
-        	this.pageCount -= 1;
-        }
-        // Page is not in BufferPool, get its table id
-        Catalog catalog = Database.getCatalog();
-        DbFile file = catalog.getDatabaseFile(pid.getTableId());
-        int first_empty = 0;
-        for (int i = 0; i < numPages; i++) {
-        	if (pages[i] == null) {
-        		first_empty = i;
-        		break;
-        	}
-        }
-        this.pages[first_empty] = file.readPage(pid);
-        this.pageCount++;
-        dirt_check_list.addFirst(Boolean.valueOf(false));
-        evict_list.addFirst(pid);
-        return this.pages[first_empty];
+    	}
+    	Page retPage = null;
+    	synchronized(this) {
+    		Page page = null;
+	    	LinkedList<PageId> pagelist = tid_locks.get(tid);
+	    	if (pagelist == null) {
+	    		pagelist = new LinkedList<PageId>();
+	    		pagelist.add(pid);
+	    	} else if (!pagelist.contains(pid)){
+	    		pagelist.add(pid);
+	    	}
+	    	System.out.println("page_list size " + pagelist.size());
+	    	
+	    	boolean cleanpages = false;
+	    	for (int i = 0; i < this.numPages; i++) {
+	        	// If the page is in the BufferPool, return it
+	        	
+	        	if (this.pages[i] != null){
+	        		
+	        		if ((pages[i].isDirty() == null)) {
+	        			cleanpages = true;
+	        		}
+	        		if (this.pages[i].getId().equals(pid)) {
+	        			
+	        			// we have accessed this page, so move it to the front of the evict list
+	        			int idx = evict_list.indexOf(pid);
+	        			dirt_check_list.remove(idx);
+	        			dirt_check_list.addFirst(java.lang.Boolean.valueOf(false));
+	        			evict_list.remove(pid); // remove the instance of pid in the linked list
+	        			evict_list.addFirst(pid); // add the instance of pid to the head of the linked list
+	        			page = this.pages[i];
+	        		}
+	        	}
+	        }
+	    	System.out.println(cleanpages);
+	    	if (page == null) {
+	    		System.out.println(pageCount);
+	        	System.out.println(this.numPages);
+	        	System.out.println(evict_list.size());
+		        if (this.pageCount >= this.numPages) {
+		        	
+		        	evictPage();
+		        	
+		        	this.pageCount--;
+		        	
+		        }
+		        // Page is not in BufferPool, get its table id
+		        Catalog catalog = Database.getCatalog();
+		        DbFile file = catalog.getDatabaseFile(pid.getTableId());
+		        int first_empty = 0;
+		        for (int i = 0; i < numPages; i++) {
+		        	if (pages[i] == null) {
+		        		first_empty = i;
+		        		break;
+		        	}
+		        }
+		        page = file.readPage(pid);
+		        this.pages[first_empty] = page;
+		        
+		        this.pageCount++;
+		        dirt_check_list.addFirst(Boolean.valueOf(false));
+		        evict_list.addFirst(pid);
+		        
+	    	}
+	    	tid_locks.put(tid, pagelist);
+	    	retPage = page;
+    	}
+        return retPage;
     }
 
     /**
@@ -164,8 +204,7 @@ public class BufferPool {
      * @param tid the ID of the transaction requesting the unlock
      */
     public void transactionComplete(TransactionId tid) throws IOException {
-        // some code goes here
-        // not necessary for lab1|lab2|lab3|lab4                                                         // cosc460
+        transactionComplete(tid, true);
     }
 
     /**
@@ -184,8 +223,56 @@ public class BufferPool {
      */
     public void transactionComplete(TransactionId tid, boolean commit)
             throws IOException {
-        // some code goes here
-        // not necessary for lab1|lab2|lab3|lab4                                                         // cosc460
+    	synchronized (this) {
+    		// check pages that may have been marked dirty but not changed,
+    		// as in the unit test TransactionTest
+    		for (int i = 0; i < numPages; i++) {
+    			if (pages[i] != null) {
+	    			if (pages[i].isDirty() != null) {
+	    				int idx = evict_list.indexOf(pages[i].getId());
+	    				dirt_check_list.set(idx, Boolean.valueOf(true));
+	    			}
+    			}
+    		}
+    		
+	        if (commit) {
+	        	flushPages(tid);
+	        	
+	        } else {
+	        	// txn aborts
+	        	// revert any changes made my txn by restoring page to its
+	        	//on disk state
+	        	Catalog catalog = Database.getCatalog();
+	        	
+	        	LinkedList<PageId> pid_list = tid_locks.remove(tid);
+	        	if (pid_list == null) {
+	        		return;
+	        	}
+	        	while (!pid_list.isEmpty()) {
+	        		PageId pid = pid_list.removeFirst();
+	        		if (evict_list.contains(pid)) {
+		        		int idx = evict_list.indexOf(pid);
+		        		evict_list.get(idx);
+		        		
+		        		if (dirt_check_list.get(idx)) {
+		        			// page is dirty
+		        			dirt_check_list.set(idx, Boolean.valueOf(false));
+		        			DbFile file = catalog.getDatabaseFile(pid.getTableId());
+		        			for (int i = 0; i < numPages; i++){
+		        	    		if (pages[i] != null) {
+		        	    			if (pages[i].getId().equals(pid)) {
+		        	    				pages[i] = file.readPage(pid);
+		        	    				break;
+		        	    			}
+		        	    			
+		        	    		}
+		        	    	}
+		        		}
+		        		releasePage(tid, pid);
+	        		}
+	        	}
+	        }
+    	}
     }
 
     
@@ -201,34 +288,37 @@ public class BufferPool {
     public void updateTuple(TransactionId tid, int tableId, Tuple t, boolean isInsert) 
     		throws DbException, IOException, TransactionAbortedException {
     	Catalog catalog = Database.getCatalog();
-        DbFile file = catalog.getDatabaseFile(tableId);
-        ArrayList<Page> modified_pages = null;
-        if (isInsert) {
-        	modified_pages = file.insertTuple(tid, t);
-        } else {
-        	modified_pages = file.deleteTuple(tid, t);
-        }
-        Page page = null;
-        for (int i = 0; i < modified_pages.size(); i++) {
-        	page = modified_pages.get(i);
-        	if (page != null) {
-        		page.markDirty(true, tid);
-        		PageId pid = page.getId();
-        		int idx = evict_list.indexOf(pid);
-        		if (idx != -1) {
-        			dirt_check_list.set(idx, Boolean.valueOf(true));
-        		}
-        		
-        		for (int j = 0; j < numPages; j++) {
-        			if (pages[j] != null) {
-        				if (pages[j].getId().equals(page.getId())) {
-        				// the modified page has a former version in the buffer pool
-        				// replace with the modified page
-        				pages[j] = page;
-        				}
-        			}
-        		}
-        	}
+        synchronized (this) {
+	    	DbFile file = catalog.getDatabaseFile(tableId);
+	        ArrayList<Page> modified_pages = null;
+	        if (isInsert) {
+	        	modified_pages = file.insertTuple(tid, t);
+	        } else {
+	        	modified_pages = file.deleteTuple(tid, t);
+	        }
+	        Page page = null;
+	        for (int i = 0; i < modified_pages.size(); i++) {
+	        	page = modified_pages.get(i);
+	        	if (page != null) {
+	        		page.markDirty(true, tid);
+	        		PageId pid = page.getId();
+	        		int idx = evict_list.indexOf(pid);
+	        		if (idx != -1) {
+	        			dirt_check_list.set(idx, Boolean.valueOf(true));
+	        			
+	        		}
+	        		
+	        		for (int j = 0; j < numPages; j++) {
+	        			if (pages[j] != null) {
+	        				if (pages[j].getId().equals(page.getId())) {
+	        				// the modified page has a former version in the buffer pool
+	        				// replace with the modified page
+	        				pages[j] = page;
+	        				}
+	        			}
+	        		}
+	        	}
+	        }
         }
     }
     
@@ -285,9 +375,12 @@ public class BufferPool {
     		if (pages[i] != null) {
     			page = pages[i];
     			if (page.isDirty() != null) {
-    				page.markDirty(false, new TransactionId());
+    				page.markDirty(false, null);
+    				int idx = evict_list.indexOf(page.getId());
+    				dirt_check_list.set(idx, Boolean.valueOf(false));
     				file = catalog.getDatabaseFile(page.getId().getTableId());
     				file.writePage(page);
+    				pages[i] = file.readPage(page.getId());
     			}
     			break;
     			
@@ -325,7 +418,10 @@ public class BufferPool {
     			if (pages[i].getId().equals(pid)) {
     				if (page.isDirty() != null) {
     					page.markDirty(false, null);
+    					int idx = evict_list.indexOf(page.getId());
+        				dirt_check_list.set(idx, Boolean.valueOf(false));
     					file.writePage(page);
+    					pages[i] = file.readPage(pid);
     				}
     				break;
     			}
@@ -338,8 +434,29 @@ public class BufferPool {
      * Write all pages of the specified transaction to disk.
      */
     public synchronized void flushPages(TransactionId tid) throws IOException {
-        // some code goes here
-        // not necessary for lab1|lab2|lab3|lab4                                                         // cosc460
+    	LinkedList<PageId> pid_list = tid_locks.get(tid);
+    	if (pid_list == null) {
+    		return;
+    	}
+    	System.out.println("pid size " + pid_list.size());
+        	while (!pid_list.isEmpty()) {
+        		PageId pid = pid_list.removeFirst();
+        		int idx = evict_list.indexOf(pid);
+        		if (idx != -1) {
+        			// page hasn't been evicted yet
+	        		evict_list.get(idx);
+	        		if (dirt_check_list.get(idx)) {
+	        			// page is dirty
+	        			
+	        			flushPage(pid);
+	        		}
+	        		//dirt_check_list.set(idx, Boolean.valueOf(false));
+	        		releasePage(tid, pid);
+	        		System.out.println("Page " + pid.toString() + " flushed by txn " + tid.getId());
+        		}
+        	
+        	}
+        	tid_locks.remove(tid);
     }
 
     /**
@@ -348,31 +465,31 @@ public class BufferPool {
      */
     private synchronized void evictPage() throws DbException {
     	PageId pid = null;
-    	ArrayList<Page> pagelist = new ArrayList<Page>(Arrays.asList(pages));
+    	int idx = -1;
+    	System.out.println("evict list size" + dirt_check_list.size());
     	for (int i = evict_list.size() - 1; i >= 0; i--) {
-    		if (!dirt_check_list.get(i)) {
-    			lockManager.removePage(pid);
+    		if (!(dirt_check_list.get(i))) {
+    			pid = evict_list.get(i);
+    			idx = i;
+    			System.out.println("clean found");
     			//if page not dirty
-    			pid = evict_list.remove(i);
-    			dirt_check_list.remove(i);
+    			break;
     		}
     	}
     	if (pid == null) {
     		throw new DbException("No clean pages in buffer pool, so could not evict a page!");
     	}
-    	
-    	try{
-    		flushPage(pid);
-    	} catch (IOException e) {
-    		throw new DbException("Could not write page to file.  Page not evicted.");
-    	}
-    	Page page = null;
+    		evict_list.remove(idx);
+			dirt_check_list.remove(idx);
+			lockManager.removePage(pid);
+    	// set the page equal to null
     	for (int i = 0; i < numPages; i++){
     		if (pages[i] != null) {
-    			page = pages[i];
     			if (pages[i].getId().equals(pid)) {
     				pages[i] = null;
+    				break;
     			}
+    			
     		}
     	}
     }

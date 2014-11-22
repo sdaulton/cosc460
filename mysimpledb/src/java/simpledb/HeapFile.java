@@ -116,9 +116,10 @@ public class HeapFile implements DbFile {
         int tableId = this.getId();
         BufferPool bp = Database.getBufferPool();
         HeapPage page = null;
+        PageId pid = null;
         boolean page_has_space = false; // indicates if page has an open slot
         for (int i = 0; i < numPages(); i++) {
-        	HeapPageId pid = new HeapPageId(tableId, i);
+        	pid = new HeapPageId(tableId, i);
         	page = (HeapPage) bp.getPage(tid, pid, Permissions.READ_ONLY);
         	if (page.getNumEmptySlots() > 0) {
         		// page has an open slot
@@ -145,14 +146,16 @@ public class HeapFile implements DbFile {
         } else {
         	// all pages are full -> create new page
         	int pgNo = numPages();
-        	HeapPageId pid = new HeapPageId(tableId, pgNo);
-        	HeapPage new_page = new HeapPage(pid, HeapPage.createEmptyPageData());
+        	HeapPageId pid2 = new HeapPageId(tableId, pgNo);
+        	HeapPage new_page = new HeapPage(pid2, HeapPage.createEmptyPageData());
         	
         	OutputStream output = new BufferedOutputStream(new FileOutputStream(f, true), BufferPool.getPageSize());
         	output.write(new_page.getPageData(),0, BufferPool.getPageSize());
            	output.flush();
            	output.close();
-           	page = (HeapPage) bp.getPage(tid, pid, Permissions.READ_WRITE);
+           	page = (HeapPage) bp.getPage(tid, pid2, Permissions.READ_WRITE); // Note: this acquires the lock for the new page
+           	// release lock for penultimate page
+           	bp.releasePage(tid, pid);
            	page.insertTuple(t);
         }
         page.markDirty(true, tid);
