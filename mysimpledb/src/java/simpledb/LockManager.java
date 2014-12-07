@@ -327,9 +327,8 @@ public class LockManager {
 	    	}
 	    	updateWaiting(new LockNode(t,p,false),lock, true);
 	    	lock = lockTable.get(p);
-	    	if ((lock.typeIsX || lock.grantedT.isEmpty()) && (!lock.waiting.isEmpty())) {
-	    		//lock was exclusive
-	    		System.out.println("giving to lock tonextwaiting");
+	    	if (lock.grantedT.isEmpty() && (!lock.waiting.isEmpty())) {
+	    		System.out.println("giving to lock to next waiting");
 	    		lock = updateLock(lock);
 	    	}
 	    	lockTable.put(p, lock);

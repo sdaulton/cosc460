@@ -60,7 +60,7 @@ public class BufferPool {
     private LinkedList<Boolean> dirt_check_list;
     private HashMap<TransactionId, LinkedList<PageId>> tid_locks;
     public HashMap<TransactionId, Long> tid_time;
-    public final int TIMEOUT = 10000;
+    public final int TIMEOUT = 2000;
     
     /**
      * LockManager for the DB
@@ -247,11 +247,20 @@ public class BufferPool {
     	synchronized (this) {
     		// check pages that may have been marked dirty but not changed,
     		// as in the unit test TransactionTest
+    		LinkedList<PageId> pid_list = tid_locks.get(tid);
     		for (int i = 0; i < numPages; i++) {
     			if (pages[i] != null) {
-	    			if (pages[i].isDirty() != null) {
+    				if (commit && (pid_list != null)) {
+    		    		// use current page contents as the before-image
+    		            // for the next transaction that modifies this page.
+    					if (pid_list.contains(pages[i].getId())) {
+    						pages[i].setBeforeImage();
+    					}
+    				}
+    				if (pages[i].isDirty() != null) {
 	    				int idx = evict_list.indexOf(pages[i].getId());
 	    				dirt_check_list.set(idx, Boolean.valueOf(true));
+	    				
 	    			}
     			}
     		}
@@ -265,7 +274,7 @@ public class BufferPool {
 	        	//on disk state
 	        	Catalog catalog = Database.getCatalog();
 	        	
-	        	LinkedList<PageId> pid_list = tid_locks.remove(tid);
+	        	pid_list = tid_locks.remove(tid);
 	        	if (pid_list == null) {
 	        		return;
 	        	}
@@ -289,8 +298,9 @@ public class BufferPool {
 		        	    		}
 		        	    	}
 		        		}
-		        		releasePage(tid, pid);
+		        		//releasePage(tid, pid);
 	        		}
+	        		releasePage(tid, pid);
 	        	}
 	        	
 	        }
@@ -405,6 +415,9 @@ public class BufferPool {
     		if (pages[i] != null) {
     			page = pages[i];
     			if (page.isDirty() != null) {
+    				flushPage(page.getId());
+    			}
+    			/*if (page.isDirty() != null) {
     				page.markDirty(false, null);
     				int idx = evict_list.indexOf(page.getId());
     				dirt_check_list.set(idx, Boolean.valueOf(false));
@@ -413,7 +426,7 @@ public class BufferPool {
     				pages[i] = file.readPage(page.getId());
     			}
     			break;
-    			
+    			*/
 		
     		}
     	}
@@ -427,8 +440,19 @@ public class BufferPool {
      * cache.
      */
     public synchronized void discardPage(PageId pid) {
-        // some code goes here
-        // only necessary for lab6                                                                            // cosc460
+        for (int pageIdx = 0; pageIdx < numPages; pageIdx++) {
+        	if (pages[pageIdx] != null){
+	        	if (pages[pageIdx].getId().equals(pid)) {
+	        		pages[pageIdx] = null;
+	        		int idx = evict_list.indexOf(pid);
+	        		if (idx != -1) {
+	        			evict_list.remove(idx);
+	        			dirt_check_list.remove(idx);
+	        		}
+	        		return;
+	        	}
+        	}
+        }
     }
 
     /**
@@ -446,11 +470,17 @@ public class BufferPool {
     		if (pages[i] != null) {
     			page = pages[i];
     			if (pages[i].getId().equals(pid)) {
-    				if (page.isDirty() != null) {
+    				TransactionId dirtier = page.isDirty();
+    				if (dirtier != null) {
+    					
     					page.markDirty(false, null);
     					int idx = evict_list.indexOf(page.getId());
         				dirt_check_list.set(idx, Boolean.valueOf(false));
-    					file.writePage(page);
+        				// append an update record to the log, with 
+        		        // a before-image and after-image.
+        		        Database.getLogFile().logWrite(dirtier, page.getBeforeImage(), page);
+        		        Database.getLogFile().force();
+        				file.writePage(page);
     					pages[i] = file.readPage(pid);
     				}
     				break;

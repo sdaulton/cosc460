@@ -47,7 +47,7 @@ public class LogRollbackTest extends LogTestBase {
         insertRow(hf1, t1, 3, 0);
         insertRow(hf1, t1, 4, 0);
         Database.getBufferPool().flushAllPages(); // ensure there's something to UNDO
-
+        
         abort(t1);
 
         Transaction t3 = new Transaction();

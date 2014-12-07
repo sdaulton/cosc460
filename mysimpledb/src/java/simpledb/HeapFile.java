@@ -117,18 +117,26 @@ public class HeapFile implements DbFile {
         BufferPool bp = Database.getBufferPool();
         HeapPage page = null;
         PageId pid = null;
+        boolean justGotLock = true;
         boolean page_has_space = false; // indicates if page has an open slot
         for (int i = 0; i < numPages(); i++) {
         	pid = new HeapPageId(tableId, i);
+        	if (bp.holdsLock(tid, pid)) {
+        		// transaction already has lock
+        		justGotLock = false;
+        	}
         	page = (HeapPage) bp.getPage(tid, pid, Permissions.READ_ONLY);
         	if (page.getNumEmptySlots() > 0) {
         		// page has an open slot
+        		
         		page = (HeapPage) bp.getPage(tid, pid, Permissions.READ_WRITE);
         		page_has_space = true;
         		break;
         	} else {
         		if (i != numPages()-1) {
-        			bp.releasePage(tid, pid);
+        			if (justGotLock) {
+        				bp.releasePage(tid, pid);
+        			}
         		} else {
         			// IS THIS RIGHT??
         			// we are going to get a new page, make sure no one is writing to the page
@@ -137,8 +145,10 @@ public class HeapFile implements DbFile {
         			// since they would first need to get a shared lock on this page and look 
         			// for empty tuple slots
         			page = (HeapPage) bp.getPage(tid, pid, Permissions.READ_WRITE);
+        			break;
         		}
         	}
+        	justGotLock = true;
         }
         if (page_has_space){
         	// a page has an open slot
@@ -154,8 +164,11 @@ public class HeapFile implements DbFile {
            	output.flush();
            	output.close();
            	page = (HeapPage) bp.getPage(tid, pid2, Permissions.READ_WRITE); // Note: this acquires the lock for the new page
-           	// release lock for penultimate page
-           	bp.releasePage(tid, pid);
+           	
+           	if (justGotLock) {
+           	// release lock for penultimate page if it was just acquired
+           		bp.releasePage(tid, pid);
+           	}
            	page.insertTuple(t);
         }
         page.markDirty(true, tid);
