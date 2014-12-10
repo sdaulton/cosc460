@@ -2,7 +2,9 @@ package simpledb;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 
 /**
@@ -93,18 +95,14 @@ class LogFileRecovery {
      * @throws java.io.IOException if tidToRollback has already committed
      */
     public void rollback(TransactionId tidToRollback) throws IOException {
-        print();
     	readOnlyLog.seek(0);
-        long lastCheckPt = readOnlyLog.readLong();
-        if (lastCheckPt == -1) {
-        	// no checkpoint written in log
-        	lastCheckPt = 0;
-        }
+        
     	readOnlyLog.seek(readOnlyLog.length() - 8); // undoing so move to end of logfile - 8 bytes to read the last long
         long logRecordPosition = readOnlyLog.readLong(); // read the start byte offset of the last record 
         int type = 0;
         long tid = 0;
         BufferPool bp = Database.getBufferPool();
+        LogFile writeLog = Database.getLogFile();
         while (logRecordPosition >= 8) { // first record in log starts at byte offset 8
         	readOnlyLog.seek(logRecordPosition);
         	type = readOnlyLog.readInt();
@@ -114,8 +112,6 @@ class LogFileRecovery {
         	if (tid == tidToRollback.getId()) {
         		// this log record is for tidToRollback
         	 
-	        	
-	        	
 	        	System.out.println("Type of record: " + type);
 	        	switch (type) {
 	        		case LogType.ABORT_RECORD:
@@ -131,24 +127,25 @@ class LogFileRecovery {
 	        			Page before = LogFile.readPageData(readOnlyLog);
 	        			DbFile beforeFile = Database.getCatalog().getDatabaseFile(before.getId().getTableId());
 	        			//overwrite page in DbFile with before image
-	        			before.setBeforeImage();
+	        			//before.setBeforeImage();
 	        			System.out.println("READING UPDATE RECORD for " + before.getId().toString());
 	        			beforeFile.writePage(before);
 	        			//discard copy of page in BufferPool, if there is one
 	        			bp.discardPage(before.getId());
 	        			//HOW DO I WRITE THE CLR RECORD
 	        			// I NEED TO GET THE LOG FILE.  CAN I DO THIS?
-	        			LogFile writeLog = Database.getLogFile();
+	        			
 	        			writeLog.logCLR(tidToRollback, before);
 	        			break;
 	        		case LogType.BEGIN_RECORD:
-	        			// stop -- this is where the txn began  
+	        			// stop -- this is where the txn began 
+	        			writeLog.logAbort(tid);
 	        			return;
 	        		case LogType.CHECKPOINT_RECORD:
 	        			// don't care
 	        			break;
 	        		case LogType.CLR_RECORD:
-	        			// do nothing?
+	        			// do nothing
 	        			break;
 	        	}
         	}
@@ -179,8 +176,176 @@ class LogFileRecovery {
      * the BufferPool are locked.
      */
     public void recover() throws IOException {
-
-        // some code goes here
-
+    	print();
+    	readOnlyLog.seek(0);
+    	long tid = 0;
+    	ArrayList<Long> losers = new ArrayList<Long>();
+    	long logRecordPosition = readOnlyLog.readLong();
+        if (logRecordPosition == -1) {
+        	// no checkpoint written in log
+        	logRecordPosition = 8;
+        } else {
+        	readOnlyLog.seek(logRecordPosition + 12); // move to checkpoint record, but skip type and tid
+        	int numTxnsAtCheckpt = readOnlyLog.readInt();
+        	logRecordPosition = logRecordPosition + 12 + 4 + 8 * numTxnsAtCheckpt + 8; // set logRecordPosition to the start of the first record after the checkpoint 
+        	//add transactions running at last checkpoint to losers list
+        	for (int i = 0; i < numTxnsAtCheckpt; i++) {
+        		tid = readOnlyLog.readLong();
+        		losers.add(Long.valueOf(tid));
+        	}
+        }
+        //now at start of first actual log record
+        
+       
+        
+        
+       
+        int type = 0;
+        Page after = null;
+        Page before = null;
+        DbFile redoFile = null;
+        BufferPool bp = Database.getBufferPool();
+        readOnlyLog.seek(logRecordPosition);
+        System.out.println(logRecordPosition);
+        System.out.println(readOnlyLog.length());
+        // REDO PHASE
+        while (readOnlyLog.getFilePointer() < readOnlyLog.length() - 8) { // first record in log starts at byte offset 8
+        	
+        	//readOnlyLog.seek(logRecordPosition);
+        	type = readOnlyLog.readInt();
+        	logRecordPosition += 4;
+        	tid = readOnlyLog.readLong();
+        	logRecordPosition += 8;
+        	System.out.println("Type of record: " + type);
+            System.out.println("position " + logRecordPosition +"; tid: " +tid);
+        	switch (type) {
+        		case LogType.ABORT_RECORD:
+        			losers.remove(Long.valueOf(tid));
+        			break;
+        		case LogType.COMMIT_RECORD:
+        			losers.remove(Long.valueOf(tid));
+        			break;
+        		case LogType.UPDATE_RECORD:
+        			//NEED TO REDO UPDATE AND FORCE FLUSH TO DISK
+        			before = LogFile.readPageData(readOnlyLog);
+        			logRecordPosition += bp.getPageSize();
+        			after = LogFile.readPageData(readOnlyLog);
+        			logRecordPosition += bp.getPageSize();
+        			//after.setBeforeImage();
+        			//use bp?
+        			redoFile = Database.getCatalog().getDatabaseFile(before.getId().getTableId());
+        			//overwrite page in DbFile with after image
+        			redoFile.writePage(after);
+        			//discard copy of page in BufferPool, if there is one
+        			bp.discardPage(before.getId());
+        			break;
+        		case LogType.BEGIN_RECORD:
+        			losers.add(Long.valueOf(tid));
+        			break;
+        		case LogType.CHECKPOINT_RECORD:
+        			//shouldn't happen
+        			
+        			System.out.println("encountered checkpoint");
+        			break;
+        		case LogType.CLR_RECORD:
+        			// redo update in clr record
+        			after = LogFile.readPageData(readOnlyLog);
+        			logRecordPosition += bp.getPageSize();
+        			//after.setBeforeImage();
+        			
+        			redoFile = Database.getCatalog().getDatabaseFile(after.getId().getTableId());
+        			//overwrite page in DbFile with after image
+        			redoFile.writePage(after);
+        			//discard copy of page in BufferPool, if there is one
+        			bp.discardPage(after.getId());
+        			break;
+        	}
+        	readOnlyLog.readLong(); //read offset
+        	logRecordPosition += 8; // move position to next log record in log file
+        	
+        	System.out.println("bottom position: " + logRecordPosition);
+        }
+        //UNDO PHASE
+        // undo losers
+        
+        System.out.println("num Losers: " + losers.size());
+        readOnlyLog.seek(0);
+        
+    	readOnlyLog.seek(readOnlyLog.length() - 8); // undoing so move to end of logfile - 8 bytes to read the last long
+        logRecordPosition = readOnlyLog.readLong(); // read the start byte offset of the last record 
+        bp = Database.getBufferPool();
+        LogFile writeLog = Database.getLogFile();
+        while (logRecordPosition >= 8) { // first record in log starts at byte offset 8
+        	readOnlyLog.seek(logRecordPosition);
+        	type = readOnlyLog.readInt();
+        	
+        	tid = readOnlyLog.readLong();
+        	System.out.println("position " + logRecordPosition +"; tid: " +tid);
+        	if (losers.contains(Long.valueOf(tid))) {
+        		// this log record is for a loser tid
+        	 
+	        	System.out.println("Type of record: " + type);
+	        	switch (type) {
+	        		case LogType.ABORT_RECORD:
+	        			//do nothing
+	        			break;
+	        		case LogType.COMMIT_RECORD:
+	        			// this shouldn't happen
+	        			throw new IOException("Transaction " + tid + " has already committed");
+	        		case LogType.UPDATE_RECORD:
+	        			// logCLR with page after and tid
+	        			before = LogFile.readPageData(readOnlyLog);
+	        			DbFile beforeFile = Database.getCatalog().getDatabaseFile(before.getId().getTableId());
+	        			//overwrite page in DbFile with before image
+	        			//before.setBeforeImage();
+	        			System.out.println("READING UPDATE RECORD for " + before.getId().toString());
+	        			beforeFile.writePage(before);
+	        			//discard copy of page in BufferPool, if there is one
+	        			bp.discardPage(before.getId());
+	        			writeLog.logCLR(tid, before);
+	        			break;
+	        		case LogType.BEGIN_RECORD:
+	        			losers.remove(Long.valueOf(tid));
+	        			writeLog.logAbort(tid);
+	        			// stop -- this is where the txn began  
+	        			break;
+	        		case LogType.CHECKPOINT_RECORD:
+	        			// don't care
+	        			break;
+	        		case LogType.CLR_RECORD:
+	        			// do nothing
+	        			break;
+	        	}
+        	}
+        	logRecordPosition = movePosition(logRecordPosition); // move position to previous log record in log file
+        	System.out.println("bottom position: " + logRecordPosition);
+        }
+        //OLD ROLLBACK VERSION
+        /*
+        Iterator<TransactionId> tids_iter = bp.tid_time.keySet().iterator();
+        TransactionId t = null;
+        System.out.println("LOSERS SIZE: "+losers.size());
+        for (int i = 0; i < losers.size(); i++) {
+        	
+        	tid = losers.get(i).longValue();
+        	
+        	while (tids_iter.hasNext()) {
+        		t = tids_iter.next();
+        		System.out.println("TID in TID TIME: "+t.getId());
+        		if (t.getId() == tid) {
+        			rollback(t);
+        			tids_iter = bp.tid_time.keySet().iterator();
+        			System.out.println("GOT TID");
+        			break;
+        		}
+        	}
+        }
+        LogFile writeLog = Database.getLogFile();
+        //write abort record to log
+        for (int i = 0; i < losers.size(); i++) {
+        	tid = losers.get(i).longValue();
+        	writeLog.logAbort(tid);
+        }
+     */   
     }
 }
