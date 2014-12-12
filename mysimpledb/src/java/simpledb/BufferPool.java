@@ -60,7 +60,7 @@ public class BufferPool {
     private LinkedList<Boolean> dirt_check_list;
     private HashMap<TransactionId, LinkedList<PageId>> tid_locks;
     public HashMap<TransactionId, Long> tid_time;
-    public final int TIMEOUT = 2000;
+    public final int TIMEOUT = 5000;
     
     /**
      * LockManager for the DB
@@ -118,7 +118,7 @@ public class BufferPool {
 	    		tid_time.put(tid, System.currentTimeMillis());
 	    	} else {
 	    		if (System.currentTimeMillis() > tid_time.get(tid) + TIMEOUT) {
-	    			System.out.println("aborted Thread " +tid.getId());
+	    			System.out.println("Thread " +tid.getId() + " aborted due to timeout.");
 	    			throw new TransactionAbortedException();
 	    		}
 	    	}
@@ -141,17 +141,7 @@ public class BufferPool {
     	}
     	Page retPage = null;
     	synchronized(this) {
-    		/*Page page = null;
-	    	LinkedList<PageId> pagelist = tid_locks.get(tid);
-	    	if (pagelist == null) {
-	    		pagelist = new LinkedList<PageId>();
-	    		pagelist.add(pid);
-	    	} else if (!pagelist.contains(pid)){
-	    		pagelist.add(pid);
-	    	}
-	    		*/
-	    	//System.out.println("page_list size " + pagelist.size());
-	    	
+    		
 	    	boolean cleanpages = false;
 	    	for (int i = 0; i < this.numPages; i++) {
 	        	// If the page is in the BufferPool, return it
@@ -173,7 +163,6 @@ public class BufferPool {
 	        		}
 	        	}
 	        }
-	    	//System.out.println(cleanpages);
 	    	if (page == null) {
 		        if (this.pageCount >= this.numPages) {
 		        	
@@ -509,9 +498,7 @@ public class BufferPool {
 	        			
 	        			flushPage(pid);
 	        		}
-	        		//dirt_check_list.set(idx, Boolean.valueOf(false));
 	        		releasePage(tid, pid);
-	        		System.out.println("Page " + pid.toString() + " flushed by txn " + tid.getId());
         		}
         	
         	}
@@ -525,12 +512,10 @@ public class BufferPool {
     private synchronized void evictPage() throws DbException {
     	PageId pid = null;
     	int idx = -1;
-    	System.out.println("evict list size" + dirt_check_list.size());
     	for (int i = evict_list.size() - 1; i >= 0; i--) {
     		if (!(dirt_check_list.get(i))) {
     			pid = evict_list.get(i);
     			idx = i;
-    			System.out.println("clean found");
     			//if page not dirty
     			break;
     		}

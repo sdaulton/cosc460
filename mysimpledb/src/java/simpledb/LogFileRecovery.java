@@ -96,7 +96,6 @@ class LogFileRecovery {
      */
     public void rollback(TransactionId tidToRollback) throws IOException {
     	readOnlyLog.seek(0);
-        
     	readOnlyLog.seek(readOnlyLog.length() - 8); // undoing so move to end of logfile - 8 bytes to read the last long
         long logRecordPosition = readOnlyLog.readLong(); // read the start byte offset of the last record 
         int type = 0;
@@ -106,13 +105,10 @@ class LogFileRecovery {
         while (logRecordPosition >= 8) { // first record in log starts at byte offset 8
         	readOnlyLog.seek(logRecordPosition);
         	type = readOnlyLog.readInt();
-        	
         	tid = readOnlyLog.readLong();
-        	System.out.println("position " + logRecordPosition +"; tid: " +tid);
         	if (tid == tidToRollback.getId()) {
         		// this log record is for tidToRollback
         	 
-	        	System.out.println("Type of record: " + type);
 	        	switch (type) {
 	        		case LogType.ABORT_RECORD:
 	        			//do nothing
@@ -127,13 +123,10 @@ class LogFileRecovery {
 	        			Page before = LogFile.readPageData(readOnlyLog);
 	        			DbFile beforeFile = Database.getCatalog().getDatabaseFile(before.getId().getTableId());
 	        			//overwrite page in DbFile with before image
-	        			//before.setBeforeImage();
-	        			System.out.println("READING UPDATE RECORD for " + before.getId().toString());
+	        			
 	        			beforeFile.writePage(before);
 	        			//discard copy of page in BufferPool, if there is one
 	        			bp.discardPage(before.getId());
-	        			//HOW DO I WRITE THE CLR RECORD
-	        			// I NEED TO GET THE LOG FILE.  CAN I DO THIS?
 	        			
 	        			writeLog.logCLR(tidToRollback, before);
 	        			break;
@@ -150,7 +143,6 @@ class LogFileRecovery {
 	        	}
         	}
         	logRecordPosition = movePosition(logRecordPosition); // move position to previous log record in log file
-        	System.out.println("bottom position: " + logRecordPosition);
         }
         
     }
@@ -176,7 +168,6 @@ class LogFileRecovery {
      * the BufferPool are locked.
      */
     public void recover() throws IOException {
-    	print();
     	readOnlyLog.seek(0);
     	long tid = 0;
     	ArrayList<Long> losers = new ArrayList<Long>();
@@ -206,18 +197,15 @@ class LogFileRecovery {
         DbFile redoFile = null;
         BufferPool bp = Database.getBufferPool();
         readOnlyLog.seek(logRecordPosition);
-        System.out.println(logRecordPosition);
-        System.out.println(readOnlyLog.length());
         // REDO PHASE
         while (readOnlyLog.getFilePointer() < readOnlyLog.length() - 8) { // first record in log starts at byte offset 8
         	
-        	//readOnlyLog.seek(logRecordPosition);
         	type = readOnlyLog.readInt();
-        	logRecordPosition += 4;
+        	//logRecordPosition += 4;
         	tid = readOnlyLog.readLong();
-        	logRecordPosition += 8;
-        	System.out.println("Type of record: " + type);
-            System.out.println("position " + logRecordPosition +"; tid: " +tid);
+        	//logRecordPosition += 8;
+        	//System.out.println("Type of record: " + type);
+            //System.out.println("position " + logRecordPosition +"; tid: " +tid);
         	switch (type) {
         		case LogType.ABORT_RECORD:
         			losers.remove(Long.valueOf(tid));
@@ -228,9 +216,9 @@ class LogFileRecovery {
         		case LogType.UPDATE_RECORD:
         			//NEED TO REDO UPDATE AND FORCE FLUSH TO DISK
         			before = LogFile.readPageData(readOnlyLog);
-        			logRecordPosition += bp.getPageSize();
+        			//logRecordPosition += bp.getPageSize();
         			after = LogFile.readPageData(readOnlyLog);
-        			logRecordPosition += bp.getPageSize();
+        			//logRecordPosition += bp.getPageSize();
         			//after.setBeforeImage();
         			//use bp?
         			redoFile = Database.getCatalog().getDatabaseFile(before.getId().getTableId());
@@ -250,7 +238,7 @@ class LogFileRecovery {
         		case LogType.CLR_RECORD:
         			// redo update in clr record
         			after = LogFile.readPageData(readOnlyLog);
-        			logRecordPosition += bp.getPageSize();
+        			//logRecordPosition += bp.getPageSize();
         			//after.setBeforeImage();
         			
         			redoFile = Database.getCatalog().getDatabaseFile(after.getId().getTableId());
@@ -261,14 +249,14 @@ class LogFileRecovery {
         			break;
         	}
         	readOnlyLog.readLong(); //read offset
-        	logRecordPosition += 8; // move position to next log record in log file
+        	//logRecordPosition += 8; // move position to next log record in log file
         	
-        	System.out.println("bottom position: " + logRecordPosition);
+        	//System.out.println("bottom position: " + logRecordPosition);
         }
         //UNDO PHASE
         // undo losers
         
-        System.out.println("num Losers: " + losers.size());
+        //System.out.println("num Losers: " + losers.size());
         readOnlyLog.seek(0);
         
     	readOnlyLog.seek(readOnlyLog.length() - 8); // undoing so move to end of logfile - 8 bytes to read the last long
@@ -280,7 +268,7 @@ class LogFileRecovery {
         	type = readOnlyLog.readInt();
         	
         	tid = readOnlyLog.readLong();
-        	System.out.println("position " + logRecordPosition +"; tid: " +tid);
+        	//System.out.println("position " + logRecordPosition +"; tid: " +tid);
         	if (losers.contains(Long.valueOf(tid))) {
         		// this log record is for a loser tid
         	 
@@ -318,34 +306,7 @@ class LogFileRecovery {
 	        	}
         	}
         	logRecordPosition = movePosition(logRecordPosition); // move position to previous log record in log file
-        	System.out.println("bottom position: " + logRecordPosition);
+        	//System.out.println("bottom position: " + logRecordPosition);
         }
-        //OLD ROLLBACK VERSION
-        /*
-        Iterator<TransactionId> tids_iter = bp.tid_time.keySet().iterator();
-        TransactionId t = null;
-        System.out.println("LOSERS SIZE: "+losers.size());
-        for (int i = 0; i < losers.size(); i++) {
-        	
-        	tid = losers.get(i).longValue();
-        	
-        	while (tids_iter.hasNext()) {
-        		t = tids_iter.next();
-        		System.out.println("TID in TID TIME: "+t.getId());
-        		if (t.getId() == tid) {
-        			rollback(t);
-        			tids_iter = bp.tid_time.keySet().iterator();
-        			System.out.println("GOT TID");
-        			break;
-        		}
-        	}
-        }
-        LogFile writeLog = Database.getLogFile();
-        //write abort record to log
-        for (int i = 0; i < losers.size(); i++) {
-        	tid = losers.get(i).longValue();
-        	writeLog.logAbort(tid);
-        }
-     */   
     }
 }

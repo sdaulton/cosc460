@@ -1,28 +1,19 @@
 package simpledb;
 
-import java.util.Collection;
-import java.util.HashMap;
-
-import simpledb.Aggregator.Op;
+import java.util.*;
 
 /**
  * Knows how to compute some aggregate over a set of StringFields.
  */
 public class StringAggregator implements Aggregator {
-
+    
     private static final long serialVersionUID = 1L;
-
-    
-    public int gbfield;
-    public Type gbfieldtype;
-    public boolean group;
-    public int aggfield;
-    public Op aggOp;
-    public TupleDesc td;
-    public Type[] typeAr;
-    public String[] fieldAr;
-    public HashMap<String, Tuple> tupMap;
-    
+    private Op what;
+    private int gbfield;
+    private Type gbfieldtype;
+    private int afield;
+    // a map of groupVal -> AggregateFields
+    private HashMap<String, AggregateFields> groups;
     
     /**
      * Aggregate constructor
@@ -33,84 +24,16 @@ public class StringAggregator implements Aggregator {
      * @param what        aggregation operator to use -- only supports COUNT
      * @throws IllegalArgumentException if what != COUNT
      */
+    
     public StringAggregator(int gbfield, Type gbfieldtype, int afield, Op what) {
-    	this.gbfield = gbfield;
+        this.what = what;
+        if (what != Op.COUNT)
+            throw new IllegalArgumentException("Invalid operator type " + what);
+        this.gbfield = gbfield;
+        this.afield = afield;
         this.gbfieldtype = gbfieldtype;
-        this.aggfield = afield;
-        if (what != Aggregator.Op.COUNT) {
-        	throw new IllegalArgumentException("Only COUNT aggregate operation is supported for strings.");
-        }
-        this.aggOp = what;
-        this.fieldAr = null;
-        this.typeAr = null;
-        this.td = null;
-        if (this.gbfieldtype == null) {
-        	this.group = false;
-        } else {
-        	this.group = true;
-        }
-        if (!group) {
-        	typeAr = new Type[1];
-        	typeAr[0] = Type.INT_TYPE;
-        	fieldAr = new String[1];
-        	fieldAr[0] = aggOp.toString();
-        } else {
-        	typeAr = new Type[2];
-        	typeAr[0] = gbfieldtype;
-        	typeAr[1] = Type.INT_TYPE;
-        	fieldAr = new String[2];
-        	fieldAr[0] = "Group By Value";
-        	fieldAr[1] = aggOp.toString();
-        	
-        }
-        tupMap = new HashMap<String, Tuple>();
-        
-        this.td = new TupleDesc(typeAr, fieldAr);
-        this.tupMap = new HashMap<String, Tuple>();
+        this.groups = new HashMap<String, AggregateFields>();
     }
-
-    
-    
-    /**
-     * Helper function that performs the aggregate operation on the newT and the current aggregated tuple (the result)
-     *
-     * @param tup the Tuple containing an aggregate field and a group-by field (the new tuple)
-     * @param agg, the current aggregate tuple result for the group
-     * @return the aggregate tuple result for the group
-     */
-    private Tuple performOp(Tuple agg, Tuple newT, String key) {
-    	Field f;
-    	int i = 0;
-    	if (this.td == null) {
-    		if (group) {
-    			fieldAr[0] = newT.getTupleDesc().getFieldName(gbfield);
-    			i = 1;
-    		}
-    		fieldAr[i] = aggOp.toString() + " " + (newT.getTupleDesc().getFieldName(aggfield));
-    		this.td = new TupleDesc(this.typeAr, this.fieldAr);
-    	}
-    	int aggIdx = td.numFields()-1;
-    	if (agg == null) {
-    		//haven't seen this group yet, or this is the first tuple in the agg
-    		agg = new Tuple(this.td);
-    		
-    		// set count to 1
-    		f = new IntField(1);
-    		if (group) {
-    			// set the grouping
-    			agg.setField(0, newT.getField(gbfield));
-    		}
-    	}
-    	else {
-    		int agg_int = ((IntField) agg.getField(aggIdx)).getValue();
-    		agg_int++;
-    		f = new IntField(agg_int);
-    	}
-    	agg.setField(aggIdx, f);
-    	return agg;
-    	
-    }
-    
     
     /**
      * Merge a new tuple into the aggregate, grouping as indicated in the constructor
@@ -118,31 +41,19 @@ public class StringAggregator implements Aggregator {
      * @param tup the Tuple containing an aggregate field and a group-by field
      */
     public void mergeTupleIntoGroup(Tuple tup) {
-    	Tuple val = null;
-    	String key;	
-    	if (!group) {
-    		key = "0";
-    		
-    	} else {
-    		if (this.gbfieldtype == Type.INT_TYPE) {
-    			key = ((IntField) tup.getField(this.gbfield)).toString();
-    		} else {
-    			key = ((StringField) tup.getField(this.gbfield)).getValue();
-    		}
-    	}
-		if(tupMap.containsKey(key)) {
-			// we have already encountered a tuple in this group
-			val = tupMap.remove(key);
-			val = performOp(val, tup, key);
-			 
-		} else {
-			// a group we haven't encountered yet
-			val = performOp(val, tup, key);
-	    	
-		}
-		tupMap.put(key, val);
+        String groupVal = "";
+        if (gbfield != NO_GROUPING) {
+            groupVal = tup.getField(gbfield).toString();
+        }
+        AggregateFields agg = groups.get(groupVal);
+        if (agg == null)
+            agg = new AggregateFields(groupVal);
+        
+        agg.count++;
+        
+        groups.put(groupVal, agg);
     }
-
+    
     /**
      * Create a DbIterator over group aggregate results.
      *
@@ -152,19 +63,49 @@ public class StringAggregator implements Aggregator {
      * aggregate specified in the constructor.
      */
     public DbIterator iterator() {
-    	Collection<Tuple> tuples = tupMap.values();
-        return new TupleIterator(this.td, tuples);
-        //throw new UnsupportedOperationException("please implement me for lab3");                           // cosc460
-
+        LinkedList<Tuple> result = new LinkedList<Tuple>();
+        int aggField = 1;
+        TupleDesc td;
+        
+        if (gbfield == NO_GROUPING) {
+            td = new TupleDesc(new Type[]{Type.INT_TYPE});
+            aggField = 0;
+        } else {
+            td = new TupleDesc(new Type[]{gbfieldtype, Type.INT_TYPE});
+        }
+        
+        // iterate over groups and create summary tuples
+        for (String groupVal : groups.keySet()) {
+            AggregateFields agg = groups.get(groupVal);
+            Tuple tup = new Tuple(td);
+            
+            if (gbfield != NO_GROUPING) {
+                if (gbfieldtype == Type.INT_TYPE)
+                    tup.setField(0, new IntField(new Integer(groupVal)));
+                else tup.setField(0, new StringField(groupVal, Type.STRING_LEN));
+            }
+            
+            switch (what) {
+                case COUNT:
+                    tup.setField(aggField, new IntField(agg.count));
+                    break;
+            }
+            
+            result.add(tup);
+        }
+        
+        DbIterator retVal = null;
+        retVal = new TupleIterator(td, Collections.unmodifiableList(result));
+        return retVal;
     }
-
+    
     /**
      * A helper struct to store accumulated aggregate values.
      */
     private class AggregateFields {
         public String groupVal;
         public int count;
-
+        
         public AggregateFields(String groupVal) {
             this.groupVal = groupVal;
             count = 0;

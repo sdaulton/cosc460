@@ -10,18 +10,17 @@ import simpledb.Aggregator.Op;
  * single column.
  */
 public class Aggregate extends Operator {
-
-    private static final long serialVersionUID = 1L;
-
     
-    public DbIterator child;
-    public int aggfield;
-    public int gbfield;
-    public boolean group;
-    public Aggregator.Op aggOp;
-    public Aggregator aggregator;
-    public TupleDesc td;
-    public DbIterator agg_iter;
+    private static final long serialVersionUID = 1L;
+    private TupleDesc td = null;
+    private DbIterator child = null;
+    private DbIterator it = null;
+    private Aggregator agg = null;
+    private Aggregator.Op aop = null;
+    private String gFieldName = null;
+    private String aFieldName = null;
+    private int afield, gfield;
+    
     /**
      * Constructor.
      * <p/>
@@ -37,93 +36,136 @@ public class Aggregate extends Operator {
      */
     public Aggregate(DbIterator child, int afield, int gfield, Aggregator.Op aop) {
         this.child = child;
-        this.aggfield = afield;
-        this.gbfield = gfield;
-        this.aggOp = aop;
-        this.group = false;
-        this.td = this.child.getTupleDesc();
-        Type gbfieldtype = null;
-        if (gbfield != -1) {
-        	group = true;
-        	gbfieldtype = td.getFieldType(gbfield);
-        }
-        if (td.getFieldType(aggfield) == Type.INT_TYPE) {
-        	this.aggregator = new IntegerAggregator(this.gbfield, gbfieldtype, aggfield, aggOp);
+        this.afield = afield;
+        this.gfield = gfield;
+        this.aop = aop;
+        if (this.aop == Op.SC_AVG)
+            if (this.gfield == Aggregator.NO_GROUPING)
+                this.afield = 0;
+            else {
+                this.afield = 1;
+                this.gfield = 0;
+            }
+        TupleDesc child_td = child.getTupleDesc();
+        
+        if (child_td.getFieldType(afield) == Type.INT_TYPE) {
+            this.agg = new IntegerAggregator(gfield,
+                                             gfield == Aggregator.NO_GROUPING ? null
+                                             : child_td.getFieldType(gfield), afield, aop);
         } else {
-        	this.aggregator = new StringAggregator(this.gbfield, gbfieldtype, aggfield, aggOp);
+            this.agg = new StringAggregator(gfield,
+                                            gfield == Aggregator.NO_GROUPING ? null
+                                            : child_td.getFieldType(gfield), afield, aop);
         }
-        try {
-        child.open();
-        while(child.hasNext()) {
-        	aggregator.mergeTupleIntoGroup(child.next());
-        }
-        child.close();
-        agg_iter = aggregator.iterator();
-        } catch (TransactionAbortedException e) {
-        	throw new RuntimeException("Transaction aborted");
-        } catch (DbException e) {
-        	throw new RuntimeException("Transaction aborted");
-
+        
+        if (gfield == Aggregator.NO_GROUPING) {
+            int nFields = 1;
+            if (aop == Op.SUM_COUNT)
+                nFields = 2;
+            Type typeAr[] = new Type[nFields];
+            String fields[] = new String[nFields];
+            
+            typeAr[0] = Type.INT_TYPE;//child_td.getFieldType(afield);
+            
+            if (aop == Op.SUM_COUNT) {
+                typeAr[1] = Type.INT_TYPE;
+                fields[1] = "";
+            }
+            
+            //	    if (aop == Op.SC_AVG) {
+            //		fields[0] = nameOfAggregatorOp(Op.SC_AVG) + "("
+            //		        + child_td.getFieldName(afield) + ")";
+            //
+            //	    } else
+            fields[0] = nameOfAggregatorOp(aop) + "("
+            + child_td.getFieldName(afield) + ")";
+            aFieldName = fields[0];
+            
+            td = new TupleDesc(typeAr, fields);
+        } else {
+            int nFields = 2;
+            if (aop == Op.SUM_COUNT)
+                nFields = 3;
+            
+            Type typeAr[] = new Type[nFields];
+            String fields[] = new String[nFields];
+            
+            typeAr[0] = child_td.getFieldType(gfield);
+            typeAr[1] = Type.INT_TYPE;//child_td.getFieldType(afield);
+            fields[0] = child_td.getFieldName(gfield);
+            gFieldName = fields[0];
+            
+            //	    if (aop == Op.SC_AVG) {
+            //		fields[1] = nameOfAggregatorOp(Op.SC_AVG) + "("
+            //		        + child_td.getFieldName(afield) + ")";
+            //
+            //	    } else
+            fields[1] = nameOfAggregatorOp(aop) + "("
+            + child_td.getFieldName(afield) + ")";
+            
+            if (aop == Op.SUM_COUNT) {
+                typeAr[2] = Type.INT_TYPE;
+                fields[2] = "";
+            }
+            
+            aFieldName = fields[1];
+            
+            td = new TupleDesc(typeAr, fields);
         }
     }
-
+    
     /**
      * @return If this aggregate is accompanied by a groupby, return the groupby
      * field index in the <b>INPUT</b> tuples. If not, return
      * {@link simpledb.Aggregator#NO_GROUPING}
      */
     public int groupField() {
-        if (group) {
-        	return this.gbfield;
-        }
-        return simpledb.Aggregator.NO_GROUPING;
-
+        return this.gfield;
     }
-
+    
     /**
      * @return If this aggregate is accompanied by a group by, return the name
      * of the groupby field in the <b>OUTPUT</b> tuples If not, return
      * null;
      */
     public String groupFieldName() {
-    	if (group) {
-    		return td.getFieldName(gbfield);
-    	}
-    	return null;
+        return this.gFieldName;
     }
-
+    
     /**
      * @return the aggregate field
      */
     public int aggregateField() {
-        return aggfield;
+        return this.afield;
     }
-
+    
     /**
      * @return return the name of the aggregate field in the <b>OUTPUT</b>
      * tuples
      */
     public String aggregateFieldName() {
-        return aggOp.toString() + " " + (td.getFieldName(aggfield));
+        return this.aFieldName;
     }
-
+    
     /**
      * @return return the aggregate operator
      */
     public Aggregator.Op aggregateOp() {
-        return aggOp;
+        return this.aop;
     }
-
+    
     public static String nameOfAggregatorOp(Aggregator.Op aop) {
         return aop.toString();
     }
-
+    
     public void open() throws NoSuchElementException, DbException,
-            TransactionAbortedException {
+    TransactionAbortedException {
+        child.open();
+        if (it != null)
+            it.open();
         super.open();
-        ((TupleIterator)agg_iter).open();
     }
-
+    
     /**
      * Returns the next tuple. If there is a group by field, then the first
      * field is the field by which we are grouping, and the second field is the
@@ -132,18 +174,27 @@ public class Aggregate extends Operator {
      * aggregate. Should return null if there are no more tuples.
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
-        Tuple t = null;
-        while (agg_iter.hasNext()) {
-        	t = agg_iter.next();
-        	return t;
+        // Actually perform the aggregation
+        if (it == null) {
+            while (child.hasNext()) {
+                Tuple t = child.next();
+                agg.mergeTupleIntoGroup(t);
+            }
+            
+            it = agg.iterator();
+            it.open();
         }
-        return t;
+        
+        if (it.hasNext())
+            return it.next();
+        return null;
     }
-
+    
     public void rewind() throws DbException, TransactionAbortedException {
-    	((TupleIterator) agg_iter).rewind();
+        close();
+        open();
     }
-
+    
     /**
      * Returns the TupleDesc of this Aggregate. If there is no group by field,
      * this will have one field - the aggregate column. If there is a group by
@@ -156,25 +207,25 @@ public class Aggregate extends Operator {
      * iterator.
      */
     public TupleDesc getTupleDesc() {
-        return agg_iter.getTupleDesc();
+        return td;
     }
-
+    
     public void close() {
-        ((TupleIterator) agg_iter).close();
         super.close();
-    }
-
-    @Override
-    public DbIterator[] getChildren() {
-        return new DbIterator[]{child};
-
-    }
-
-    @Override
-    public void setChildren(DbIterator[] children) {
-        if (children.length == 1) {
-        	this.child = children[0];
+        child.close();
+        if (it != null) {
+            it.close();
         }
     }
-
+    
+    @Override
+    public DbIterator[] getChildren() {
+        return new DbIterator[]{this.child};
+    }
+    
+    @Override
+    public void setChildren(DbIterator[] children) {
+        this.child = children[0];
+    }
+    
 }

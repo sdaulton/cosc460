@@ -192,12 +192,12 @@ public class LockManager {
     	synchronized (bp) {
     		if (bp.tid_time == null) {
     			//System.out.println("tid_time is null");
-    		} else if (bp.tid_time.remove(node.tid) == null) {
+    		} else if (bp.tid_time.get(node.tid) == null) {
     			//System.out.println("tid_time doesnt contain node.tid");
     		}
-    		if (bp.tid_time.containsKey(node.tid)) {
-    			bp.tid_time.put(node.tid, (bp.tid_time.remove(node.tid) + bp.TIMEOUT));
-    		}
+    		//if (bp.tid_time.containsKey(node.tid)) {
+    		//	bp.tid_time.put(node.tid, (bp.tid_time.remove(node.tid) + bp.TIMEOUT));
+    		//}
     		}
     	lock.typeIsX = node.typeIsX;
     	if (lock.typeIsX) {
@@ -210,9 +210,9 @@ public class LockManager {
     			if (!node.typeIsX) {
     				//shared
     				lock.grantedT.add(node.tid);
-    				synchronized (bp) {
-    		    		bp.tid_time.put(node.tid, bp.tid_time.remove(node.tid) + bp.TIMEOUT);
-    		    	}
+    				//synchronized (bp) {
+    		    		//bp.tid_time.put(node.tid, bp.tid_time.remove(node.tid) + bp.TIMEOUT);
+    		    	//}
     				//System.out.println("and given to Thread "+ node.tid.getId());
     			} else {
     				//exclusive, put back on waiting list
@@ -224,8 +224,7 @@ public class LockManager {
     		return lock;
     	}
     }
-    // NEED TO UPDATE WAIT FUNCTION TO DEAL WITH UPGRADES,
-    // AND CHECKING FOR SHARED LOCK REQUESTS AT TOP OF WAIT LIST
+
     
     
     // used to determine if a transaction t holds the lock for page p
@@ -252,69 +251,19 @@ public class LockManager {
     	
     	while (holdsLock(t,p, requestedX) == false) {
     		synchronized(bp) {
+    			if (!bp.tid_time.containsKey(t)) {
+    				//transaction already aborted
+    				
+    			}
         		if (System.currentTimeMillis() > bp.tid_time.get(t) + bp.TIMEOUT) {
         			//System.out.println("aborted Thread " +t.getId());
         			throw new TransactionAbortedException();
         		}
         	}
-    		//System.out.println("waiting"+ "Thread "+ t.getId());
-    		
-    		//acquireLockManagerLock();
-    		
-    		/*synchronized(this) {
-    			if(abort_list != null && !abort_list.isEmpty()){
-    	    		System.out.println(abort_list.size());
-    	    		if (abort_list.size() != 0){
-    	    			for (int i =0; i < abort_list.size(); i++){
-    	    				System.out.println(abort_list.get(i).getId());
-    	    			}
-    	    			
-    	    		}
-    			}
-	    		if (abort_list.contains(t)) {
-	    			abort_list.remove(t);
-	    			//releaseLockManagerLock();
-	    			System.out.println("aborted "+ t.getId());
-	    			throw new TransactionAbortedException();
-	    			
-	    		}
-    		}*/
-    		//releaseLockManagerLock();
     		try {
     			Thread.sleep(500);
-    			//timeout++;
     			} catch (InterruptedException ignored) {}
-    		
-    		//if (timeout >=2) {
-    			//System.out.println("aborted "+ t.getId());
-    			//throw new TransactionAbortedException();
-    			// abort all txns holding the lock
-    			//System.out.println("aborted");
-    			//acquireLockManagerLock();
-    			//timeout = 0;
-    			/*synchronized(this) {
-	    			LockEntry lock = lockTable.get(p);
-	    			while (!lock.grantedT.isEmpty()) {
-	    				TransactionId tid = lock.grantedT.remove();
-	    				abort_list.add(tid);
-	    				//try {
-	    					//Database.getBufferPool().transactionComplete(tid, false);
-	    				//} catch (java.io.IOException e) {
-	    					//throw new TransactionAbortedException();}
-	    			}
-	    			lockTable.put(p, lock);
-    			}*/
-    			//releaseLockManagerLock();
-    		//}
-    		//if(timeout == 6) {
-    			//throw new TransactionAbortedException();
-    		//}
     	}
-    	/*synchronized(this) {
-    		if (abort_list.contains(t)){
-    			abort_list.remove(t);
-    		}
-    	}*/
     }
     
     // method to release the lock for a particular page
@@ -323,6 +272,7 @@ public class LockManager {
     	synchronized(this) {
 	    	// has lock for LockManager
 	    	LockEntry lock = lockTable.get(p);
+	    	if (lock!= null) {
 	    	lock.grantedT.remove(t);
 	    	if (lock.grantedT.isEmpty()) {
 	    		//System.out.println("granted is empty");
@@ -334,6 +284,7 @@ public class LockManager {
 	    		lock = updateLock(lock);
 	    	}
 	    	lockTable.put(p, lock);
+	    	}
     	}
     	//releaseLockManagerLock();
     }
@@ -347,7 +298,8 @@ public class LockManager {
     		LockNode node = lock.waiting.get(i);
     		if (node.getTransactionId().equals(txn.getTransactionId())) {
     			if (!abort) {
-					node.typeIsX = (node.typeIsX || txn.typeIsX);
+    				lock.typeIsX = (node.typeIsX || txn.typeIsX);
+					//node.typeIsX = (node.typeIsX || txn.typeIsX);
 					lock.waiting.add(i, node);
 					lockTable.put(txn.pid, lock);
 		    		return true;
